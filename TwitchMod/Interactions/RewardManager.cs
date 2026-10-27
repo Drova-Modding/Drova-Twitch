@@ -129,8 +129,8 @@ namespace TwitchMod.Interactions
                 new("StatusEffect", "Kosten zufälliger Effekt", ELanguage.de),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.en),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.de),
-                new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen kann oder 2? Naja Hauptsache Willi geht es damit gut", ELanguage.en),
-                new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen kann oder 2? Naja Hauptsache Willi geht es damit gut", ELanguage.de),
+                new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen möchte oder 2? Naja Hauptsache Willi wird nicht vergessen", ELanguage.en),
+                new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen möchte oder 2? Naja Hauptsache Willi wird nicht vergessen", ELanguage.de),
             ], ModName);
 
 #if DEBUG
