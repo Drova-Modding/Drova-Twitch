@@ -1,0 +1,44 @@
+# Channel point rewards and the dialogue poll, with the tests standing in for Twitch.
+# Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
+
+default hero 5
+default slot 0
+set olaf 52b3d368-a4c0-4a62-9542-1f597c3e669b
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A ?items item_potion_health_0
+A expect twitch_reward HealingPotion contains True timeout=1
+A ?items item_potion_health_0
+A expect twitch_reward FocusPotion contains True timeout=1
+A ?items misc_currency
+A expect twitch_reward Gold contains True timeout=1
+A ?items misc_currency
+A expect twitch_reward RandomItem contains True timeout=1
+A ?actors 600
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_reward Bandits contains True timeout=1
+sleep 3
+A ?actors 600
+A shot twitch_spawns.png
+
+A tpnear $olaf 0 80
+sleep 3
+A talk $olaf
+A skip
+# Olaf's hub offers five answers, the most a Twitch poll takes.
+A expect dialogue contains "4:I've got to go" timeout=15
+A expect twitch_locked contains "key=True" timeout=1
+A twitch_poll
+A expect twitch_locked contains "voting=True interactable=False raycast=False digits=False" timeout=3
+# Answer 2 wins the stand-in vote, so Olaf answers about Nemeton.
+A twitch_vote 1,7,0,2,0
+A expect twitch_locked contains "voting=False" timeout=3
+A expect dialogue contains "Red_Moor" timeout=10
+A skip
+A expect twitch_locked contains "interactable=True raycast=True digits=True" timeout=10
+A bye

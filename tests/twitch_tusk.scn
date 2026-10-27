@@ -1,0 +1,25 @@
+# The Great Tusk opens a boss prediction when Mombert starts the ritual. Needs hero 0 slot 61 (Drova-Coop-Mod fixture_goddess.scn).
+set mombert 8fe6b401-4600-4662-9702-b3cc379f269b
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load 0 61
+A wait world=1 timeout=240
+
+A expect gvar GVars_Fight_GreatTuskFight StartRitual_Start == 0 timeout=5
+A expect gvar GVars_Fight_GreatTuskFight MainFight_Finished == 0 timeout=5
+A expect gvar BrutusCave_Fight BrutusDead == 0 timeout=5
+A expect twitch_fight == none timeout=1
+
+A tpnear $mombert 40 0
+sleep 6
+A tpnear $mombert 40 0
+sleep 2
+A talk $mombert
+A skip
+A expect dialogue contains "I'm ready. For Nemeton!" timeout=180
+A choose I'm ready. For Nemeton!
+A skip
+A expect gvar GVars_Fight_GreatTuskFight StartRitual_Start == 1 timeout=120
+A expect twitch_fight contains "fighting the Great Tusk" timeout=5

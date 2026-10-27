@@ -1,0 +1,16 @@
+# The spezi on entwicklerwg's channel: installed by the mod, and the first random item is always one.
+# Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A expect items twitch_spezi == 0 timeout=1
+A twitch_channel EntwicklerWG
+A expect twitch_reward RandomItem contains True timeout=1
+A expect items twitch_spezi == 1 timeout=5

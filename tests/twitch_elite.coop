@@ -1,0 +1,37 @@
+# The elite reward in co-op: every machine buffs its own copy of the enemy with the factor the streamer's machine rolled.
+# Each elite is killed once checked, an elite left alone downs both players and the game over reloads the world.
+include ../../Drova-Coop-Mod/tests/scenarios/session.coop
+
+B tpnear me 0 0
+
+# The client redeems. The host owns the enemy's health, so its copy must carry the same buff.
+B twitch_reward Monster
+B expect twitch_result contains True timeout=15
+B expect actors 400 contains Snapper timeout=10
+A expect actors 1500 contains Snapper timeout=10
+sleep 3
+B twitch_reward Elite
+B expect twitch_elite contains "max" timeout=10
+A expect twitch_elite contains "max" timeout=10
+sleep 2
+A state
+B expect twitch_elite == $A.elite timeout=10
+B ?twitch_elite
+A hit Snapper(Clone) 999999 pure nosource
+A expect twitch_elite == none timeout=10
+B expect twitch_elite == none timeout=10
+
+# The host redeems, the client gets it.
+A twitch_reward Monster
+A expect twitch_result contains True timeout=5
+B expect actors 400 contains Snapper timeout=10
+sleep 3
+A twitch_reward Elite
+A expect twitch_elite contains "max" timeout=10
+sleep 2
+A state
+B expect twitch_elite == $A.elite timeout=10
+A ?twitch_elite
+B shot elite_client.png
+A shot elite_host.png
+A hit Snapper(Clone) 999999 pure nosource

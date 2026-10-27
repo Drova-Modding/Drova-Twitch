@@ -1,0 +1,35 @@
+# Rewards wait while the streamer is busy: in a dialogue, dead, or loading. They land once the streamer is free again.
+
+default hero 5
+default slot 0
+set olaf 52b3d368-a4c0-4a62-9542-1f597c3e669b
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+# Free: delivered at once.
+A expect twitch_reward HealingPotion contains True timeout=1
+
+# In a dialogue: held until it ends.
+A tpnear $olaf 0 80
+sleep 3
+A talk $olaf
+A expect dialogue contains "in=1" timeout=10
+A twitch_reward Gold
+sleep 3
+A expect twitch_result == pending timeout=1
+A bye
+A expect twitch_result == True timeout=10
+
+# Dead: held through the reload, delivered to the new body.
+A hit me 99999 pure nosource
+A expect health me contains dead timeout=5
+A twitch_reward StatusEffect
+sleep 3
+A expect twitch_result == pending timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+A expect twitch_result == True timeout=15

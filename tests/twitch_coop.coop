@@ -1,0 +1,32 @@
+# Spawn rewards on a joined player go through the host, and both machines see the result.
+include ../../Drova-Coop-Mod/tests/scenarios/session.coop
+
+A ?state
+B ?state
+
+# Next to each other first.
+B tpnear me 0 0
+A ?actors 600
+B twitch_reward Monster
+B expect twitch_result contains True timeout=15
+B expect actors 400 contains Snapper timeout=10
+A expect actors 1500 contains Snapper timeout=10
+B twitch_reward Bandits
+B expect twitch_result contains True timeout=15
+B expect actors 500 contains Template_Human_NPC timeout=10
+A expect actors 1500 contains Template_Human_NPC timeout=10
+B ?actors 600
+A ?actors 1500
+B shot coop_client.png
+A shot coop_host.png
+
+# The host's own redemption still spawns locally.
+A twitch_reward Monster
+A expect twitch_result contains True timeout=5
+
+# Far from the host, where the host has not streamed that area in.
+B tp 40,1170
+sleep 8
+B twitch_reward Bandits
+B expect twitch_result contains True timeout=15
+B expect actors 600 contains Template_Human_NPC timeout=10

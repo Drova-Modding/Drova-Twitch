@@ -1,0 +1,30 @@
+# The elite reward on a single machine: the nearest enemy gets 150 to 400% health and damage plus resistances.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+# Nothing hostile at the start, so the redemption waits for the first enemy to come close.
+A twitch_reward Elite
+A expect twitch_result == pending timeout=1
+A expect twitch_elite == none timeout=1
+A twitch_reward Monster
+A expect twitch_elite contains "max" timeout=15
+A ?twitch_elite
+A expect twitch_elite hp >= 150 timeout=1
+A expect twitch_elite hp <= 400 timeout=1
+A expect twitch_elite dmg >= 150 timeout=1
+A expect twitch_elite dmg <= 400 timeout=1
+A expect twitch_elite contains ":arm" timeout=1
+A ?health Snapper(Clone)
+
+# The same enemy never becomes an elite twice, so the next redemption waits again.
+A twitch_reward Elite
+A expect twitch_result == pending timeout=2
+A shot twitch_elite.png
+A hit Snapper(Clone) 999999 pure nosource

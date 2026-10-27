@@ -1,0 +1,63 @@
+# The random status effect reward on a single machine: every effect of the pool lands on the player.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+# Food. Only one food effect is active at a time, so each is checked right after it is eaten.
+A expect twitch_status Meal == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Meal_t1 timeout=2
+A expect twitch_status RoastedMeat == True timeout=1
+A expect effects me contains StatusEffect_Buff_RoastedMeat_Saturated timeout=2
+A expect twitch_status Rootstew == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Rootstew timeout=2
+A expect twitch_status Fishpan == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Fishpan timeout=2
+A expect twitch_status Agilostew == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Agilostew timeout=2
+A expect twitch_status FarmersFood == True timeout=1
+A expect effects me contains StatusEffect_Buff_FarmersFood_Saturated timeout=2
+
+# Potions.
+A expect twitch_status HealingSalve == True timeout=1
+A expect effects me contains StatusEffect_Buff_HealingSalve_Saturated timeout=2
+A expect twitch_status DarkBrew == True timeout=1
+A expect effects me contains StatusEffect_Consumable_darkBrew_healing timeout=2
+A expect twitch_status Blossom == True timeout=1
+A expect effects me contains StatusEffect_Buff_Blossom_Saturated timeout=2
+A expect twitch_status FlowPotion == True timeout=1
+A expect effects me contains StatusEffect_Buff_WeakSourcePotion_DurationEffect timeout=2
+A expect twitch_status StrongFlowPotion == True timeout=1
+A expect effects me contains StatusEffect_Buff_StrongSourcePotion_DurationEffect timeout=2
+A expect twitch_status Windwalker == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Potion_Windwalker timeout=2
+A expect twitch_status Golemsalve == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Golemsalve timeout=2
+A expect twitch_status VoidEssence == True timeout=1
+A expect effects me contains StatusEffect_Buff_VoidEssence timeout=2
+A ?effects me
+A shot twitch_status_buffs.png
+
+# Negative effects. Bleeding must really hurt, the effect alone deals nothing.
+A expect twitch_status Poison == True timeout=1
+A expect effects me contains StatusEffect_Poison timeout=2
+sleep 6
+A expect effects me contains StatusEffect_Poison timeout=1
+A expect twitch_status Drunk == True timeout=1
+A expect effects me contains StatusEffect_Intoxication timeout=2
+A state
+A expect twitch_status Bleeding == True timeout=1
+A expect effects me contains StatusEffect_Bleeding timeout=2
+A expect health me cur != $A.hp timeout=10
+A ?health me
+A shot twitch_status_negative.png
+
+# The reward itself, a few times.
+A expect twitch_reward StatusEffect contains True timeout=1
+A expect twitch_reward StatusEffect contains True timeout=1
+A expect twitch_reward StatusEffect contains True timeout=1

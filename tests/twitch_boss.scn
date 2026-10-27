@@ -1,0 +1,32 @@
+# Boss fight tracking for predictions, with a Snapper standing in for a boss and the tests standing in for Twitch.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+A twitch_boss Snapper
+A expect twitch_fight == none timeout=1
+
+# Won: the boss dies.
+A twitch_reward Monster
+A expect twitch_fight contains "fighting Snapper" timeout=10
+A hit Snapper(Clone) 99999 pure nosource
+A expect twitch_fight contains "Yes Snapper" timeout=5
+
+# Fled: the streamer leaves for longer than the grace time.
+A twitch_reward Monster
+A expect twitch_fight contains "fighting Snapper" timeout=10
+A tp 40,1170
+A expect twitch_fight contains "fled Snapper" timeout=40
+
+# Lost: the streamer dies.
+A tp -2132,-5262
+sleep 5
+A twitch_reward Monster
+A expect twitch_fight contains "fighting" timeout=70
+A hit me 99999 pure nosource
+A expect twitch_fight contains "No Snapper" timeout=10

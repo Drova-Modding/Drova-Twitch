@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <GamePath Condition="'$(GamePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Drova - Forsaken Kin</GamePath>
+  </PropertyGroup>
+</Project>

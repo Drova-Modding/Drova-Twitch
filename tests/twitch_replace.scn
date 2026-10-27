@@ -1,0 +1,30 @@
+# A reward replace refunds what has not landed yet: a reward held during a dialogue and an elite still waiting for an enemy.
+
+default hero 5
+default slot 0
+set olaf 52b3d368-a4c0-4a62-9542-1f597c3e669b
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+# Held in a dialogue: refunded, and the replace goes through.
+A tpnear $olaf 0 80
+sleep 3
+A talk $olaf
+A expect dialogue contains "in=1" timeout=10
+A twitch_reward Gold
+A expect twitch_result == pending timeout=1
+A expect twitch_replace == open=0 timeout=1
+A expect twitch_result == False timeout=1
+A expect twitch_replaced == done timeout=5
+A bye
+
+# Nothing hostile nearby, so the elite waits. The replace refunds it.
+A twitch_reward Elite
+A expect twitch_result == pending timeout=1
+A expect twitch_replace == open=0 timeout=1
+A expect twitch_result == False timeout=1
+A expect twitch_replaced == done timeout=5

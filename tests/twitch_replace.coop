@@ -1,0 +1,8 @@
+# A reward replace waits for a spawn the host has not answered yet, so the viewer is neither refunded for a spawn that landed nor charged for one that did not.
+include ../../Drova-Coop-Mod/tests/scenarios/session.coop
+
+B tpnear me 0 0
+B expect twitch_replace Monster == open=1 timeout=1
+B expect twitch_result == True timeout=15
+B expect twitch_replaced == done timeout=5
+B expect actors 400 contains Snapper timeout=10

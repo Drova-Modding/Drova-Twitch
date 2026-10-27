@@ -1,0 +1,17 @@
+{
+  "Version": 1,
+  "Items": [
+    {
+      "ReadableId": "twitch_spezi",
+      "Base": "item_salve_healing",
+      "LocaPath": "TwitchMod",
+      "BuyValue": 60,
+      "SellValue": 12,
+      "EffectStacks": 9,
+      "Ability": {
+        "ABI_HealthValue": 3
+      },
+      "Icon": "twitch_spezi.png"
+    }
+  ]
+}

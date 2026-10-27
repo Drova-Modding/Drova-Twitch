@@ -1,0 +1,27 @@
+# The random status effect reward in co-op. The streamer's own machine owns their body, so the effect runs there
+# and the teammate sees its result through the synchronized health.
+include ../../Drova-Coop-Mod/tests/scenarios/session.coop
+
+B tpnear me 0 0
+
+# A client streamer bleeds, and the host sees the lost health on the client's body.
+B state
+B expect twitch_status Bleeding == True timeout=1
+B expect effects me contains StatusEffect_Bleeding timeout=2
+B expect health me cur != $B.hp timeout=10
+A ?effects DrovaCoop.Remote
+B expect effects me !contains StatusEffect_Bleeding timeout=30
+B state
+A expect health DrovaCoop.Remote cur == $B.hp timeout=10
+
+# A host streamer gets a buff and a debuff, only on their own body.
+A expect twitch_status Windwalker == True timeout=1
+A expect effects me contains StatusEffect_Consumable_Potion_Windwalker timeout=2
+A expect twitch_status Drunk == True timeout=1
+A expect effects me contains StatusEffect_Intoxication timeout=2
+B expect effects me !contains StatusEffect_Consumable_Potion_Windwalker timeout=1
+B ?effects DrovaCoop.Remote
+
+# The reward itself on both machines.
+A expect twitch_reward StatusEffect contains True timeout=1
+B expect twitch_reward StatusEffect contains True timeout=1
