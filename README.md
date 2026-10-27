@@ -15,7 +15,7 @@ Channel point rewards need an Affiliate or Partner channel.
 ## Install
 
 1. Install MelonLoader and the [Drova Modding API](https://github.com/Drova-Modding/Drova-Modding-API).
-2. Put `TwitchMod.dll` in `Mods`, and `TwitchSDK.dll` and `R66_core.dll` in `UserLibs`.
+2. Extract `TwitchMod.zip` into the game folder, or install it with Vortex.
 3. In game, open Options, Modding, Twitch and log in. The login opens in your browser.
 
 Reward costs, gold amount and poll duration are set in the same menu.

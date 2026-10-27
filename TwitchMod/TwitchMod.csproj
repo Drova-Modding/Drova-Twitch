@@ -452,12 +452,37 @@
 		<Compile Include="Interactions\RewardEffects.cs" />
 		<Compile Include="Interactions\RewardManager.cs" />
 		<Content Include="..\Directory.Build.props" />
-		<EmbeddedResource Include="Modding_API\Items\TwitchMod.json" LogicalName="TwitchMod.json" />
-		<EmbeddedResource Include="..\spezi.png" LogicalName="twitch_spezi.png" />
+		<SdkFiles Include="..\lib\TwitchSDK\TwitchSDK.dll;..\lib\TwitchSDK\R66_core.dll;..\lib\TwitchSDK\libR66_core.so;..\lib\TwitchSDK\libR66_core.dylib" />
 	</ItemGroup>
-	
+
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="COPY &quot;$(TargetPath)&quot; &quot;$(GamePath)\Mods&quot;" />
-		<Copy SourceFiles="..\lib\TwitchSDK\TwitchSDK.dll;..\lib\TwitchSDK\R66_core.dll;..\lib\TwitchSDK\libR66_core.so;..\lib\TwitchSDK\libR66_core.dylib" DestinationFolder="$(GamePath)\UserLibs" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="@(SdkFiles)" DestinationFolder="$(GamePath)\UserLibs" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="Modding_API\Items\TwitchMod.json" DestinationFolder="$(GamePath)\Mods\Modding_API\Items" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="..\spezi.png" DestinationFiles="$(GamePath)\Mods\Modding_API\Items\twitch_spezi.png" SkipUnchangedFiles="true" />
+	</Target>
+
+	<Target Name="PackageMod" AfterTargets="PostBuild">
+		<PropertyGroup>
+			<DistDir>$(MSBuildProjectDirectory)\..\dist</DistDir>
+			<StagingDir>$(DistDir)\staging\$(Configuration)</StagingDir>
+			<ZipName Condition="'$(Configuration)'=='Debug'">TwitchMod_Dev.zip</ZipName>
+			<ZipName Condition="'$(ZipName)'==''">TwitchMod.zip</ZipName>
+			<ZipPath>$(DistDir)\$(ZipName)</ZipPath>
+		</PropertyGroup>
+
+		<RemoveDir Directories="$(StagingDir)" />
+		<MakeDir Directories="$(DistDir);$(StagingDir)" />
+
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(StagingDir)\Mods" />
+		<Copy SourceFiles="Modding_API\Items\TwitchMod.json" DestinationFolder="$(StagingDir)\Mods\Modding_API\Items" />
+		<Copy SourceFiles="..\spezi.png" DestinationFiles="$(StagingDir)\Mods\Modding_API\Items\twitch_spezi.png" />
+		<Copy SourceFiles="@(SdkFiles)" DestinationFolder="$(StagingDir)\UserLibs" />
+		<Copy SourceFiles="..\LICENSE;..\THIRD-PARTY-NOTICES.md" DestinationFolder="$(StagingDir)\Mods\TwitchMod" />
+
+		<Delete Files="$(ZipPath)" />
+		<Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Compress-Archive -Path '$(StagingDir)\*' -DestinationPath '$(ZipPath)' -Force&quot;" />
+
+		<Message Importance="high" Text="Packaged $(Configuration) build -&gt; $(ZipPath)" />
 	</Target>
 </Project>

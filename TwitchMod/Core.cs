@@ -19,7 +19,6 @@ namespace TwitchMod
     public class Core : MelonMod
     {
         private const string MainScene = "Scene_MainMenu";
-        private static readonly string[] ItemFiles = ["TwitchMod.json", "twitch_spezi.png"];
 
         private bool _isInitialized;
 
@@ -28,7 +27,6 @@ namespace TwitchMod
             CoopAccess.Declare(CoopBehavior.AuthorityGated);
             CoopSpawns.Register();
             CoopElites.Register();
-            InstallItems();
 
             InputActionRegister.OnInputActionsLoaded += () =>
             {
@@ -39,29 +37,6 @@ namespace TwitchMod
                     poll.AddBinding("<Gamepad>/leftStickPress", null, null, "Gamepad");
                 }
             };
-        }
-
-        /// <summary>
-        /// Writes the mod's custom item files into the Modding API's item folder, which it reads at the main menu.
-        /// The folder is the API's own rule, so this does not wait for the API to initialize.
-        /// </summary>
-        private void InstallItems()
-        {
-            string folder = Path.Combine(Path.GetDirectoryName(MelonAssembly.Location)!, "Modding_API", "Items");
-            try
-            {
-                Directory.CreateDirectory(folder);
-                foreach (string name in ItemFiles)
-                {
-                    using Stream resource = typeof(Core).Assembly.GetManifestResourceStream(name)!;
-                    using FileStream file = File.Create(Path.Combine(folder, name));
-                    resource.CopyTo(file);
-                }
-            }
-            catch (Exception e)
-            {
-                LoggerInstance.Warning("Could not install the custom items in " + folder + ": " + e.Message);
-            }
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)

@@ -1,4 +1,4 @@
-# The spezi on entwicklerwg's channel: installed by the mod, and the first random item is always one.
+# The spezi on entwicklerwg's channel: the first random item is always one.
 # Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
 
 default hero 5

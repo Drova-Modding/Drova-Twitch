@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using MelonLoader;
@@ -20,6 +21,8 @@ namespace TwitchMod.Integration
         private sealed class MelonPAL : ManagedPAL
         {
             private const string KeyringService = "DrovaTwitchMod";
+            private readonly Dictionary<int, ClientWebSocket> _sockets = new();
+            private int _nextSocket = 1;
 
             private readonly string _basePath = Application.persistentDataPath;
             private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -65,6 +68,74 @@ namespace TwitchMod.Integration
                     HttpStatus = (int)response.StatusCode,
                     ResponseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false)
                 };
+            }
+
+            /** ManagedPAL's websockets without its Console.WriteLine calls, which print every EventSub message,
+             * keepalives included. ManagedPAL keeps its sockets private, so these four keep their own.
+             */
+            protected override async Task<int> CreateWebSocket(CreateWebSocketRequest req)
+            {
+                ClientWebSocket socket = new();
+                int handle;
+                lock (_sockets)
+                {
+                    handle = _nextSocket++;
+                    _sockets[handle] = socket;
+                }
+                await socket.ConnectAsync(new Uri(req.Url), CancellationToken.None).ConfigureAwait(false);
+                return handle;
+            }
+
+            protected override async Task SendWebSocketMessage(SendWebSocketMessageRequest req)
+            {
+                await GetSocket(req.Handle).SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(req.Message)),
+                    WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            protected override async Task CloseWebSocket(CloseWebSocketRequest req)
+            {
+                ClientWebSocket socket = GetSocket(req.Handle);
+                lock (_sockets)
+                    _sockets.Remove(req.Handle);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "normal closure", CancellationToken.None).ConfigureAwait(false);
+                socket.Dispose();
+            }
+
+            protected override void DisposeManaged()
+            {
+                base.DisposeManaged();
+                lock (_sockets)
+                {
+                    foreach (ClientWebSocket socket in _sockets.Values)
+                        socket.Dispose();
+                    _sockets.Clear();
+                }
+            }
+
+            private ClientWebSocket GetSocket(int handle)
+            {
+                lock (_sockets)
+                    return _sockets[handle];
+            }
+
+            protected override async Task<string> RecvWebSocketMessage(RecvWebSocketMessageRequest req)
+            {
+                ClientWebSocket socket = GetSocket(req.Handle);
+                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(req.TimeoutSeconds));
+                using MemoryStream message = new();
+                byte[] buffer = new byte[1024];
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token).ConfigureAwait(false);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                        throw new EndOfStreamException("websocket is closed");
+                    if (result.MessageType != WebSocketMessageType.Text)
+                        throw new InvalidOperationException("not receiving text");
+                    message.Write(buffer, 0, result.Count);
+                }
+                while (!result.EndOfMessage);
+                return Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
             }
 
             /** The core stores its access and refresh token through ReadFile and WriteFile.
