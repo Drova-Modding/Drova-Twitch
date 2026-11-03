@@ -1,6 +1,10 @@
 # Spawn rewards on a joined player go through the host, and both machines see the result.
 include ../../Drova-Coop-Mod/tests/scenarios/session.coop
 
+# Pins the monster reward to a Snapper on both machines. The host spawns it.
+A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+B twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+
 A ?state
 B ?state
 

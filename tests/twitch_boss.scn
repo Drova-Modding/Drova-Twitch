@@ -8,6 +8,8 @@ A wait ready=1 timeout=240
 A wait saves=separate timeout=1
 A load $hero $slot
 A wait world=1 timeout=240
+# Pins the monster reward to a Snapper.
+A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
 A twitch_boss Snapper
 A expect twitch_fight == none timeout=1
 
