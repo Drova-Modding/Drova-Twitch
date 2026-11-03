@@ -18,6 +18,7 @@ namespace TwitchMod.Interactions
     {
         private const ushort EliteId = 202;
         private const float SearchRadius = 400f;
+        private const float ChaseRange = 900f;
         private const float MinFactor = 1.5f;
         private const float MaxFactor = 4f;
         private const float ArmorPerFactor = 4f;
@@ -129,6 +130,7 @@ namespace TwitchMod.Interactions
             int resistance = Mathf.RoundToInt(factor * ArmorPerFactor);
             if (!ActorBuffAccess.TryApply(enemy, new ActorBuff(factor, factor, resistance, resistance)))
                 return false;
+            EnemyAccess.MakeAggressive(enemy, ChaseRange);
 
             foreach ((int id, Actor elite) in Elites)
             {

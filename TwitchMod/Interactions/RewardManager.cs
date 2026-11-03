@@ -159,6 +159,7 @@ namespace TwitchMod.Interactions
             TestAgent.RegisterState(() => "hp=" + (_player != null && _player.GetHealth() != null ? _player.GetHealth().CurHealth : -1f)
                 .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
 
+            TestAgent.RegisterCommand("twitch_monster", guid => RewardEffects.ForcedMonster = guid.Trim());
             TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId)));
 #endif
 
@@ -352,6 +353,15 @@ namespace TwitchMod.Interactions
             if (reward == null)
                 return;
 
+            // Twitch does not reliably enforce the global cooldown.
+            if (Time.unscaledTime < reward.ReadyAt)
+            {
+                MelonLogger.Msg("[Twitch] " + reward.Title + " is still on cooldown.");
+                _open.Add(Finish(false));
+                return;
+            }
+            reward.ReadyAt = Time.unscaledTime + reward.CooldownSeconds;
+
             Deliver(reward, Finish);
             return;
 
@@ -426,6 +436,8 @@ namespace TwitchMod.Interactions
             public string Title { get; } = title;
             public Action<Actor, Action<bool>> Apply { get; } = apply;
             public int Cost => GetInt(OptionKey, DefaultCost);
+            public int CooldownSeconds { get; } = cooldownSeconds;
+            public float ReadyAt { get; set; }
 
             public CustomRewardDefinition ToDefinition() => new()
             {
@@ -433,8 +445,8 @@ namespace TwitchMod.Interactions
                 Prompt = prompt,
                 Cost = Cost,
                 BackgroundColor = RewardColor,
-                IsGlobalCooldownEnabled = cooldownSeconds > 0,
-                GlobalCooldownSeconds = cooldownSeconds
+                IsGlobalCooldownEnabled = CooldownSeconds > 0,
+                GlobalCooldownSeconds = CooldownSeconds
             };
         }
     }
