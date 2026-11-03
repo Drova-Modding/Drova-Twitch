@@ -7,7 +7,7 @@ using TwitchMod.Interactions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(TwitchMod.Core), "TwitchMod", "1.0.0", "TrustNoOneElse")]
+[assembly: MelonInfo(typeof(TwitchMod.Core), "TwitchMod", "1.1.0", "TrustNoOneElse")]
 [assembly: MelonGame("Just2D", "Drova")]
 [assembly: MelonAdditionalDependencies("Drova_Modding_API")]
 

@@ -1,7 +1,13 @@
 # The elite reward in co-op: every machine buffs its own copy of the enemy with the factor the streamer's machine rolled.
-# Each elite is killed once checked, an elite left alone downs both players and the game over reloads the world.
+# Each elite is killed once checked. The players are invincible: an elite chases at once and would down both, and the game over reloads the world.
 include ../../Drova-Coop-Mod/tests/scenarios/session.coop
 
+# Pins the monster reward to a Snapper on both machines. The host spawns it.
+A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+B twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+
+A invincible on
+B invincible on
 B tpnear me 0 0
 
 # The client redeems. The host owns the enemy's health, so its copy must carry the same buff.

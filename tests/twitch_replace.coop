@@ -1,6 +1,10 @@
 # A reward replace waits for a spawn the host has not answered yet, so the viewer is neither refunded for a spawn that landed nor charged for one that did not.
 include ../../Drova-Coop-Mod/tests/scenarios/session.coop
 
+# Pins the monster reward to a Snapper on both machines. The host spawns it.
+A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+B twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+
 B tpnear me 0 0
 B expect twitch_replace Monster == open=1 timeout=1
 B expect twitch_result == True timeout=15
