@@ -14,7 +14,7 @@ namespace TwitchMod.Integration
     {
         private const float PollInterval = 1f;
 
-        private static readonly TwitchOAuthScope[] Scopes = [TwitchOAuthScope.Channel.ManagePolls, TwitchOAuthScope.Channel.ManagePredictions, TwitchOAuthScope.Channel.ManageRedemptions];
+        private static readonly TwitchOAuthScope[] Scopes = [TwitchOAuthScope.Channel.ManagePolls, TwitchOAuthScope.Channel.ManagePredictions, TwitchOAuthScope.Channel.ManageRedemptions, new("user:write:chat")];
 
         private GameTask<AuthState>? _authStateTask;
         private GameTask<AuthenticationInfo>? _authInfoTask;
@@ -32,6 +32,11 @@ namespace TwitchMod.Integration
         /// The logged-in channel's login name, or null until Twitch answered.
         /// </summary>
         public static string? LoginName { get; internal set; }
+
+        /// <summary>
+        /// The logged-in channel's user id, or null until Twitch answered.
+        /// </summary>
+        public static string? ChannelId { get; private set; }
 
         private void Update()
         {
@@ -54,6 +59,7 @@ namespace TwitchMod.Integration
                     {
                         _status = state.Status;
                         LoginName = null;
+                        ChannelId = null;
                         MelonLogger.Msg("[Twitch] " + _status);
                     }
                 }
@@ -68,6 +74,7 @@ namespace TwitchMod.Integration
                 if (_userInfoTask.Exception == null && IsLoggedIn)
                 {
                     LoginName = _userInfoTask.MaybeResult?.LoginName;
+                    ChannelId = _userInfoTask.MaybeResult?.ChannelId;
                     MelonLogger.Msg("[Twitch] Logged in as " + LoginName);
                 }
                 _userInfoTask = null;

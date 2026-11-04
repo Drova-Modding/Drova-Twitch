@@ -1,0 +1,23 @@
+# Chat commands and the redemption toast, with raw IRC lines standing in for Twitch chat.
+# The runner cuts lines at a hash sign, so the channel is written without one.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A ?items item_potion_health_0
+A twitch_chat :viewer42!viewer42@viewer42.tmi.twitch.tv PRIVMSG streamer :!HealingPotion please
+A expect twitch_result contains True timeout=10
+A ?items item_potion_health_0
+A shot twitch_chat_toast.png
+
+# The cooldown holds the second use back, and plain chat and server lines do nothing.
+A expect twitch_chat :viewer43!viewer43@viewer43.tmi.twitch.tv PRIVMSG streamer :!healingpotion contains refused timeout=1
+A expect twitch_chat :viewer44!viewer44@viewer44.tmi.twitch.tv PRIVMSG streamer :hello there contains refused timeout=1
+A expect twitch_chat PING :tmi.twitch.tv contains unparsed timeout=1
+A expect twitch_chat :viewer45!viewer45@viewer45.tmi.twitch.tv PRIVMSG streamer :!gold contains True timeout=1
