@@ -43,8 +43,9 @@ namespace TwitchMod.Interactions
 
         /// <summary>
         /// Spawns near <paramref name="player"/>, here or on the host. <paramref name="done"/> gets whether it spawned.
+        /// <paramref name="raiders"/> above zero makes the bandits a raid of that many viewers.
         /// </summary>
-        public static void Spawn(Kind kind, Actor player, Action<bool> done)
+        public static void Spawn(Kind kind, Actor player, Action<bool> done, int raiders = 0)
         {
             if (!PlayerAccess.TryGetLevel(player, out int level))
             {
@@ -56,7 +57,7 @@ namespace TwitchMod.Interactions
             Vector2 origin = player.transform.position;
             if (CoopAccess.IsWorldAuthority)
             {
-                bool spawned = SpawnHere(kind, origin, level);
+                bool spawned = SpawnHere(kind, origin, level, raiders);
                 if (!spawned)
                     MelonLogger.Warning("[Twitch] Spawn refunded: no free spot near the player.");
                 done(spawned);
@@ -72,7 +73,7 @@ namespace TwitchMod.Interactions
 
             int id = ++_nextRequest;
             Pending[id] = (done, Time.unscaledTime + AnswerTimeout);
-            NetworkAccess.SendToAll(new SpawnRequest { Id = id, Kind = kind, X = origin.x, Y = origin.y, Level = level });
+            NetworkAccess.SendToAll(new SpawnRequest { Id = id, Kind = kind, X = origin.x, Y = origin.y, Level = level, Raiders = raiders });
         }
 
         /// <summary>
@@ -96,9 +97,9 @@ namespace TwitchMod.Interactions
             }
         }
 
-        private static bool SpawnHere(Kind kind, Vector2 origin, int level)
+        private static bool SpawnHere(Kind kind, Vector2 origin, int level, int raiders)
         {
-            return kind == Kind.Monster ? RewardEffects.SpawnMonster(origin, level) : RewardEffects.SpawnBandits(origin, level);
+            return kind == Kind.Monster ? RewardEffects.SpawnMonster(origin, level) : RewardEffects.SpawnBandits(origin, level, raiders);
         }
 
         private static void OnRequest(INetPeer peer, SpawnRequest request)
@@ -106,7 +107,7 @@ namespace TwitchMod.Interactions
             bool spawned = false;
             try
             {
-                spawned = CoopAccess.IsWorldAuthority && SpawnHere(request.Kind, new Vector2(request.X, request.Y), request.Level);
+                spawned = CoopAccess.IsWorldAuthority && SpawnHere(request.Kind, new Vector2(request.X, request.Y), request.Level, request.Raiders);
             }
             catch (Exception e)
             {
@@ -129,6 +130,7 @@ namespace TwitchMod.Interactions
             public float X;
             public float Y;
             public int Level;
+            public int Raiders;
 
             public void Write(INetWriter writer)
             {
@@ -137,6 +139,7 @@ namespace TwitchMod.Interactions
                 writer.Put(X);
                 writer.Put(Y);
                 writer.Put(Level);
+                writer.Put(Raiders);
             }
 
             public void Read(INetReader reader)
@@ -146,6 +149,7 @@ namespace TwitchMod.Interactions
                 X = reader.GetFloat();
                 Y = reader.GetFloat();
                 Level = reader.GetInt();
+                Raiders = reader.GetInt();
             }
         }
 

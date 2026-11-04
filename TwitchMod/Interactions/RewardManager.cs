@@ -31,6 +31,14 @@ namespace TwitchMod.Interactions
         private const int MaxCost = 10000;
         private const int MinPollSeconds = 15;
         private const int MaxPollSeconds = 300;
+        private const string ChatModeKey = "TwitchMod_ChatMode";
+        private const string ChatCooldownKey = "TwitchMod_ChatCooldown";
+        private const int ChatCooldownDefault = 120;
+        private const int MinChatCooldown = 10;
+        private const int MaxChatCooldown = 3600;
+        private const float ReplyInterval = 5f;
+        private const string HelpCommand = "!drova";
+        private const string ChannelEventsLockName = @"Local\DrovaTwitchMod_ChannelEvents";
 
         private const string SpeziChannel = "entwicklerwg";
         private const string SpeziItemId = "twitch_spezi";
@@ -62,6 +70,7 @@ namespace TwitchMod.Interactions
         private Actor? _player;
         private Task? _registerTask;
         private GameTask<EventStream<CustomRewardEvent>>? _streamTask;
+        private GameTask<EventStream<ChannelRaidEvent>>? _raidTask;
         private int[] _registeredCosts = [];
         private readonly Queue<(Reward Reward, Func<bool, Task> Finish, float Deadline)> _held = new();
         private readonly List<Task> _open = [];
@@ -69,10 +78,17 @@ namespace TwitchMod.Interactions
         private float _retryAt;
         private static bool _speziGiven;
         private Task? _signOutTask;
+        private TwitchChat? _chat;
+        private bool _rewardsEnabled;
+        private bool _chatEnabled;
+        private float _nextReply;
 #if DEBUG
         private string _lastTestResult = "none";
         private GameTask<UserInfo>? _userLookup;
 #endif
+        private Mutex? _channelEventsLock;
+        private bool _ownsChannelEvents;
+        private bool _toldNotOwner;
         private GameObject? _logIn;
         private GameObject? _logInHint;
         private GameObject? _logOut;
@@ -127,6 +143,24 @@ namespace TwitchMod.Interactions
                 new("Elite", "Kosten Elite-Gegner", ELanguage.de),
                 new("StatusEffect", "Random effect cost", ELanguage.en),
                 new("StatusEffect", "Kosten zufälliger Effekt", ELanguage.de),
+                new("Toast", "[viewer] redeemed [reward]", ELanguage.en),
+                new("Toast", "[viewer] hat [reward] eingelöst", ELanguage.de),
+                new("RewardsVia", "Rewards through", ELanguage.en),
+                new("RewardsVia", "Belohnungen über", ELanguage.de),
+                new("ChannelPoints", "Channel points", ELanguage.en),
+                new("ChannelPoints", "Kanalpunkte", ELanguage.de),
+                new("ChatCommands", "Chat commands", ELanguage.en),
+                new("ChatCommands", "Chat-Befehle", ELanguage.de),
+                new("ChatHint", "Channel points need an Affiliate or Partner channel. Chat commands work on any channel: viewers type !gold, !monster and the other reward names, free but with a cooldown.", ELanguage.en),
+                new("ChatHint", "Kanalpunkte brauchen einen Affiliate- oder Partner-Kanal. Chat-Befehle gehen auf jedem Kanal: Zuschauer schreiben !gold, !monster und die anderen Belohnungsnamen, kostenlos, aber mit Abklingzeit.", ELanguage.de),
+                new("RaidToast", "[raider] raids with [viewers] viewers! Bandits are coming, and they carry gold.", ELanguage.en),
+                new("RaidToast", "[raider] raidet mit [viewers] Zuschauern! Banditen kommen, und sie tragen Gold.", ELanguage.de),
+                new("Help", "Drova chat commands: [commands]. Each one has a cooldown.", ELanguage.en),
+                new("Help", "Drova-Chat-Befehle: [commands]. Jeder hat eine Abklingzeit.", ELanguage.de),
+                new("CooldownReply", "@[viewer] [command] is ready again in [seconds] s.", ELanguage.en),
+                new("CooldownReply", "@[viewer] [command] ist in [seconds] s wieder bereit.", ELanguage.de),
+                new("ChatCooldown", "Chat command cooldown (seconds)", ELanguage.en),
+                new("ChatCooldown", "Abklingzeit der Chat-Befehle (Sekunden)", ELanguage.de),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.en),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.de),
                 new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen möchte oder 2? Naja Hauptsache Willi wird nicht vergessen", ELanguage.en),
@@ -159,13 +193,32 @@ namespace TwitchMod.Interactions
             TestAgent.RegisterState(() => "hp=" + (_player != null && _player.GetHealth() != null ? _player.GetHealth().CurHealth : -1f)
                 .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
 
+            TestAgent.RegisterCommand("twitch_chat", line =>
+            {
+                if (!TwitchChat.TryParse(line.Trim(), out string? viewer, out string? text))
+                    return "unparsed";
+                _lastTestResult = "pending";
+                return OnChat(viewer, text, applied => _lastTestResult = applied.ToString()) ? _lastTestResult : "refused";
+            });
+
+            TestAgent.RegisterCommand("twitch_raid", viewers =>
+            {
+                _lastTestResult = "pending";
+                OnRaid("TestRaider", int.Parse(viewers.Trim()), applied => _lastTestResult = applied.ToString());
+                return _lastTestResult;
+            });
+
             TestAgent.RegisterCommand("twitch_monster", guid => RewardEffects.ForcedMonster = guid.Trim());
             TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId)));
 #endif
 
+            _rewardsEnabled = RewardsOn();
+            _chatEnabled = ChatCommandsOn();
             OptionMenuAccess.Instance.OnOptionMenuOpen += BuildOptions;
             OptionMenuAccess.Instance.OnOptionMenuClose += () =>
             {
+                _rewardsEnabled = RewardsOn();
+                _chatEnabled = ChatCommandsOn();
                 if (!_registeredCosts.SequenceEqual(Definitions().Select(definition => (int)definition.Cost)))
                     _registerTask = null;
             };
@@ -181,6 +234,8 @@ namespace TwitchMod.Interactions
             if (twitch == null || _authManager == null)
                 return;
 
+            ReadChat();
+
             if (_signOutTask != null)
             {
                 if (!_signOutTask.IsCompleted)
@@ -192,6 +247,7 @@ namespace TwitchMod.Interactions
             if (!_authManager.IsLoggedIn)
             {
                 ResetSubscription();
+                ResetRaids();
                 _registerTask = null;
                 return;
             }
@@ -199,14 +255,32 @@ namespace TwitchMod.Interactions
             if (Time.unscaledTime < _retryAt)
                 return;
 
+            if (!OwnsChannelEvents())
+            {
+                _retryAt = Time.unscaledTime + RetryDelay;
+                return;
+            }
+
+            ReadRaids(twitch);
+
             if (_registerTask == null)
             {
                 CustomRewardDefinition[] definitions = Definitions();
                 _registeredCosts = definitions.Select(definition => (int)definition.Cost).ToArray();
                 _registerTask = ReplaceRewards(() => twitch.ReplaceCustomRewards(definitions).Task);
-                _registerTask.ContinueWith(task => MelonLogger.Warning(
-                    "[Twitch] Could not create channel point rewards. They need an Affiliate or Partner channel. " + task.Exception?.InnerException?.Message),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                if (definitions.Length > 0)
+                {
+                    _registerTask.ContinueWith(task => MelonLogger.Warning(
+                        "[Twitch] Could not create channel point rewards. They need an Affiliate or Partner channel. " + task.Exception?.InnerException?.Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+                }
+            }
+
+            // Without rewards there is nothing to redeem, and a channel without channel points would fail every retry.
+            if (_registeredCosts.Length == 0)
+            {
+                ResetSubscription();
+                return;
             }
 
             _streamTask ??= twitch.SubscribeToCustomRewardEvents();
@@ -227,6 +301,33 @@ namespace TwitchMod.Interactions
             }
         }
 
+        /// <summary>
+        /// Whether this is the one Drova on the PC that runs the rewards. The login is stored for the whole PC, and every
+        /// further game subscribing to the same channel's events makes Twitch refuse all of them (429).
+        /// </summary>
+        private bool OwnsChannelEvents()
+        {
+            if (_ownsChannelEvents)
+                return true;
+
+            _channelEventsLock ??= new Mutex(false, ChannelEventsLockName);
+            try
+            {
+                _ownsChannelEvents = _channelEventsLock.WaitOne(0);
+            }
+            catch (AbandonedMutexException)
+            {
+                _ownsChannelEvents = true;
+            }
+
+            if (!_ownsChannelEvents && !_toldNotOwner)
+            {
+                _toldNotOwner = true;
+                MelonLogger.Warning("[Twitch] Another Drova on this PC holds the channel point rewards until it closes, so this one leaves them to it.");
+            }
+            return _ownsChannelEvents;
+        }
+
         private void BuildOptions()
         {
             OptionUIBuilder? builder = OptionMenuAccess.Instance.GetBuilder(ModName);
@@ -245,6 +346,7 @@ namespace TwitchMod.Interactions
                 .CreateButton(LocalizationAccess.GetLocalizedString(ModName, "Account"), LocalizationAccess.GetLocalizedString(ModName, "LogOut"), () =>
                 {
                     ResetSubscription();
+                    ResetRaids();
                     _registerTask = null;
                     UnityTwitch? twitch = TwitchManager.Twitch;
                     if (twitch != null && _signOutTask == null)
@@ -260,6 +362,10 @@ namespace TwitchMod.Interactions
                 .CreateSlider(LocalizationAccess.GetLocalizedString(ModName, "PollSeconds"), PollManager.PollSecondsKey, MinPollSeconds, MaxPollSeconds, PollManager.PollSecondsDefault)
                 .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "Predictions"), LocalizationAccess.GetLocalizedString(ModName, "On"),
                     LocalizationAccess.GetLocalizedString(ModName, "Off"), PredictionManager.EnabledKey, true)
+                .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "RewardsVia"), LocalizationAccess.GetLocalizedString(ModName, "ChatCommands"),
+                    LocalizationAccess.GetLocalizedString(ModName, "ChannelPoints"), ChatModeKey)
+                .CreateDisclaimer(LocalizationAccess.GetLocalizedString(ModName, "ChatHint"))
+                .CreateSlider(LocalizationAccess.GetLocalizedString(ModName, "ChatCooldown"), ChatCooldownKey, MinChatCooldown, MaxChatCooldown, ChatCooldownDefault)
                 .CreateInputActionSection([new(LocalizationAccess.GetLocalizedString(ModName, "PollKey"), PollManager.StartAction)])
                 .Build();
 
@@ -290,10 +396,14 @@ namespace TwitchMod.Interactions
             return ConfigAccessor.TryGetConfigValue(key, out int value) ? value : fallback;
         }
 
+        private static bool RewardsOn() => !ConfigAccessor.TryGetConfigValue(RewardsEnabledKey, out bool value) || value;
+
+        /// <summary>Whether the rewards run as chat commands instead of channel points. Only one of the two is ever active.</summary>
+        private static bool ChatCommandsOn() => RewardsOn() && ConfigAccessor.TryGetConfigValue(ChatModeKey, out bool value) && value;
+
         private static CustomRewardDefinition[] Definitions()
         {
-            bool enabled = !ConfigAccessor.TryGetConfigValue(RewardsEnabledKey, out bool value) || value;
-            return enabled ? Rewards.Select(reward => reward.ToDefinition()).ToArray() : [];
+            return RewardsOn() && !ChatCommandsOn() ? Rewards.Select(reward => reward.ToDefinition()).ToArray() : [];
         }
 
         /// <summary>
@@ -316,7 +426,7 @@ namespace TwitchMod.Interactions
         private void OnApplicationQuit()
         {
             UnityTwitch? twitch = TwitchManager.Twitch;
-            if (twitch == null)
+            if (twitch == null || !_ownsChannelEvents)
                 return;
 
             CoopSpawns.Tick(true);
@@ -336,6 +446,153 @@ namespace TwitchMod.Interactions
                 return _speziGiven = true;
             return RewardEffects.GiveRandomItem(player);
         }
+
+        /// <summary>
+        /// Runs chat commands while they are switched on. Only the Drova holding the channel events reads chat,
+        /// so a second game on the PC does not apply every command twice.
+        /// </summary>
+        private void ReadChat()
+        {
+            string? channel = AuthManager.LoginName;
+            bool reading = _chatEnabled && _ownsChannelEvents && _authManager != null && _authManager.IsLoggedIn && channel != null;
+            if (_chat != null && (!reading || _chat.Channel != channel))
+            {
+                _chat.Dispose();
+                _chat = null;
+            }
+            if (!reading)
+                return;
+
+            if (_chat == null)
+            {
+                _chat = new TwitchChat(channel!);
+                ReplyInChat(HelpText());
+            }
+            while (_chat.Messages.TryDequeue(out (string Viewer, string Text) message))
+                OnChat(message.Viewer, message.Text, null);
+        }
+
+        /// <summary>
+        /// Delivers the reward a chat command names. Returns whether it was one and off cooldown.
+        /// </summary>
+        [HideFromIl2Cpp]
+        private bool OnChat(string viewer, string text, Action<bool>? done)
+        {
+            string command = text.Trim().Split(' ', 2)[0];
+            if (string.Equals(command, HelpCommand, StringComparison.OrdinalIgnoreCase))
+            {
+                ReplyInChat(HelpText());
+                return false;
+            }
+
+            Reward? reward = Rewards.FirstOrDefault(candidate => string.Equals("!" + candidate.Key, command, StringComparison.OrdinalIgnoreCase));
+            if (reward == null)
+                return false;
+
+            if (Time.unscaledTime < reward.ChatReadyAt)
+            {
+                int seconds = Mathf.CeilToInt(reward.ChatReadyAt - Time.unscaledTime);
+                ReplyInChat(Localized("CooldownReply").Replace("[viewer]", viewer).Replace("[command]", command).Replace("[seconds]", seconds.ToString()));
+                return false;
+            }
+
+            reward.ChatReadyAt = Time.unscaledTime + Math.Max(reward.CooldownSeconds, GetInt(ChatCooldownKey, ChatCooldownDefault));
+            Deliver(reward, applied =>
+            {
+                MelonLogger.Msg("[Twitch] " + viewer + " used " + command + (applied ? "." : ", it could not be applied."));
+                if (applied)
+                    ShowToast(viewer, reward);
+                else
+                    reward.ChatReadyAt = 0f;
+                done?.Invoke(applied);
+                return Task.CompletedTask;
+            });
+            return true;
+        }
+
+        private static string HelpText()
+        {
+            return Localized("Help").Replace("[commands]", string.Join(" ", Rewards.Select(reward => "!" + reward.Key.ToLowerInvariant())));
+        }
+
+        private void ReplyInChat(string text)
+        {
+            UnityTwitch? twitch = TwitchManager.Twitch;
+            string? channelId = AuthManager.ChannelId;
+            if (twitch == null || channelId == null || Time.unscaledTime < _nextReply)
+                return;
+
+            // ponytail: one reply per interval for the whole chat keeps a spammed command under Twitch's chat rate limit. Per viewer if that is too quiet.
+            _nextReply = Time.unscaledTime + ReplyInterval;
+            _ = twitch.SendChatMessage(channelId, text);
+        }
+
+        /// <summary>
+        /// Reads incoming raids while the rewards are on. They run in both modes, channel points and chat commands.
+        /// </summary>
+        private void ReadRaids(UnityTwitch twitch)
+        {
+            if (!_rewardsEnabled)
+            {
+                ResetRaids();
+                return;
+            }
+
+            _raidTask ??= twitch.SubscribeToChannelRaidEvents();
+            if (!_raidTask.IsCompleted)
+                return;
+
+            try
+            {
+                EventStream<ChannelRaidEvent> stream = _raidTask.MaybeResult;
+                while (stream.TryGetNextEvent(out ChannelRaidEvent raid))
+                {
+                    if (raid != null)
+                        OnRaid(raid.FromBroadcasterName, (int)raid.Viewers, null);
+                }
+            }
+            catch (AggregateException e)
+            {
+                MelonLogger.Warning("[Twitch] Raid events failed, retrying in " + RetryDelay + " s: " + e.InnerException?.Message);
+                ResetRaids();
+                _retryAt = Time.unscaledTime + RetryDelay;
+            }
+        }
+
+        /// <summary>
+        /// Sends a bandit group at the streamer, bigger with more raiders, and the bandits carry gold to loot.
+        /// </summary>
+        [HideFromIl2Cpp]
+        private void OnRaid(string raider, int viewers, Action<bool>? done)
+        {
+            ToastAccess.Show(Localized("RaidToast").Replace("[raider]", raider).Replace("[viewers]", viewers.ToString()));
+            Reward raid = new("Raid", "Raid by " + raider, string.Empty, 0, 0,
+                (player, spawned) => CoopSpawns.Spawn(CoopSpawns.Kind.Bandits, player, spawned, Math.Max(1, viewers)));
+            Deliver(raid, applied =>
+            {
+                MelonLogger.Msg("[Twitch] " + raider + " raided with " + viewers + " viewers" + (applied ? "." : ", but the ambush could not spawn."));
+                done?.Invoke(applied);
+                return Task.CompletedTask;
+            });
+        }
+
+        private void ResetRaids()
+        {
+            _raidTask?.Task.ContinueWith(task => task.Result.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion);
+            _raidTask = null;
+        }
+
+        [HideFromIl2Cpp]
+        private static void ShowToast(string viewer, Reward reward)
+        {
+            ToastAccess.Show(Localized("Toast").Replace("[viewer]", viewer).Replace("[reward]", reward.Title));
+        }
+
+        /// <summary>
+        /// The text for <paramref name="key"/> in the game's language. Placeholders are written [name], because the
+        /// localization files wrap each value in braces.
+        /// </summary>
+        private static string Localized(string key) => LocalizationAccess.GetLocalizedString(ModName, key).GetLocalizedString(null);
 
         private void ResetSubscription()
         {
@@ -368,6 +625,8 @@ namespace TwitchMod.Interactions
             Task Finish(bool applied)
             {
                 MelonLogger.Msg("[Twitch] " + redemption.RedeemerName + " redeemed " + reward.Title + (applied ? "." : ", refunded."));
+                if (applied)
+                    ShowToast(redemption.RedeemerName, reward);
                 return twitch.ResolveCustomReward(redemption, applied ? CustomRewardRedemptionState.Fulfilled : CustomRewardRedemptionState.Canceled).Task;
             }
         }
@@ -438,6 +697,7 @@ namespace TwitchMod.Interactions
             public int Cost => GetInt(OptionKey, DefaultCost);
             public int CooldownSeconds { get; } = cooldownSeconds;
             public float ReadyAt { get; set; }
+            public float ChatReadyAt { get; set; }
 
             public CustomRewardDefinition ToDefinition() => new()
             {

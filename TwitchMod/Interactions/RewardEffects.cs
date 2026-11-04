@@ -1,3 +1,4 @@
+using System.Collections;
 using Drova_Modding_API.Access;
 using Drova_Modding_API.GlobalFields;
 using Drova_Modding_API.Systems.Coop;
@@ -21,6 +22,11 @@ namespace TwitchMod.Interactions
     internal static class RewardEffects
     {
         private const int MaxBandits = 5;
+        private const int MaxRaidBandits = 8;
+        private const int RaidersPerBandit = 10;
+        private const int GoldPerRaider = 25;
+        private const int MaxRaidGold = 5000;
+        private const float BodyLoadSeconds = 30f;
         private const float BanditSpread = 30f;
         private const int BleedShare = 4;
         private const int FoodGroup = 0;
@@ -35,6 +41,7 @@ namespace TwitchMod.Interactions
         private static readonly Vector2 MonsterRange = new(150f, 300f);
         private static readonly Vector2 BanditRange = new(260f, 420f);
         private static readonly ActorWorldLocator Locator = new();
+        private static readonly List<CoopPlayer> Players = [];
 
         /// <summary>
         /// Hostile, non-boss creatures by the lowest player level they suit. Prefab levels are all 1, so the tiers
@@ -143,7 +150,7 @@ namespace TwitchMod.Interactions
         /// <summary>
         /// Spawns a group of hostile bandits near <paramref name="origin"/>, scaled by the requesting player's level.
         /// </summary>
-        public static bool SpawnBandits(Vector2 origin, int level)
+        public static bool SpawnBandits(Vector2 origin, int level, int raiders = 0)
         {
             if (!CoopAccess.ShouldRun(CoopBehavior.AuthorityGated))
                 return false;
@@ -153,15 +160,55 @@ namespace TwitchMod.Interactions
                 return false;
 
             BanditDifficulty difficulty = level < 8 ? BanditDifficulty.Easy : level < 20 ? BanditDifficulty.Normal : BanditDifficulty.Hard;
-            int count = Math.Min(2 + level / 10, MaxBandits);
+            int count = raiders > 0 ? Math.Min(2 + raiders / RaidersPerBandit, MaxRaidBandits) : Math.Min(2 + level / 10, MaxBandits);
             List<LazyActor> bandits = [];
             for (int i = 0; i < count; i++)
             {
                 Vector2 position = anchor.Value + Random.insideUnitCircle * BanditSpread;
                 bandits.Add(BanditCreator.CreateRandomBanditLazy("Bandit", position, difficulty));
             }
-            EnemyAccess.MakeAggressiveGroup(bandits, BanditRange.y + BanditSpread);
+            EnemyAccess.MakeAggressiveGroup(bandits, BanditRange.y + BanditSpread, NearestPlayer(origin));
+            if (raiders > 0)
+                MelonCoroutines.Start(GiveGoldWhenBuilt(bandits, Math.Max(1, Math.Min(raiders * GoldPerRaider, MaxRaidGold) / count)));
             return true;
+        }
+
+        /// <summary>
+        /// The raid's loot. A lazy bandit has no inventory until its body is built near a player.
+        /// </summary>
+        private static IEnumerator GiveGoldWhenBuilt(List<LazyActor> bandits, int gold)
+        {
+            float deadline = Time.time + BodyLoadSeconds;
+            while (Time.time < deadline && bandits.Any(bandit => bandit != null && (bandit.Actor == null || !bandit.Actor.IsInitialized)))
+                yield return null;
+
+            // ponytail: a body that unloads before its death is rebuilt without the gold. Track the handles if streamers outrun raids.
+            foreach (LazyActor bandit in bandits)
+            {
+                if (bandit != null && bandit.Actor != null && bandit.Actor.IsInitialized)
+                    GiveItem(bandit.Actor, Item.READABLEID_CURRENCY, gold);
+            }
+        }
+
+        /// <summary>The streamer the reward is for, who may be a co-op teammate when the host spawns it.</summary>
+        private static Actor? NearestPlayer(Vector2 origin)
+        {
+            CoopAccess.GetPlayers(Players);
+            Actor? nearest = null;
+            float best = float.MaxValue;
+            foreach (CoopPlayer player in Players)
+            {
+                if (!CoopAccess.TryGetPlayerActor(player.Id, out Actor? body))
+                    continue;
+
+                float distance = ((Vector2)body.transform.position - origin).sqrMagnitude;
+                if (distance < best)
+                {
+                    best = distance;
+                    nearest = body;
+                }
+            }
+            return nearest;
         }
 
         /// <summary>

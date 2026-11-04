@@ -445,6 +445,7 @@
 		<Compile Include="Integration\AuthManager.cs" />
 		<Compile Include="Integration\PollManager.cs" />
 		<Compile Include="Integration\PredictionManager.cs" />
+		<Compile Include="Integration\TwitchChat.cs" />
 		<Compile Include="Integration\TwitchManager.cs" />
 		<Compile Include="Integration\UnityTwitch.cs" />
 		<Compile Include="Interactions\CoopElites.cs" />

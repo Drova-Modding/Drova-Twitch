@@ -1,0 +1,17 @@
+# A raid of 42 viewers: six bandits attack, and each carries a share of the gold.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A run invincible on
+A expect twitch_raid 42 contains True timeout=1
+# Solo, the bandits show by their template name. The save has none this close.
+A expect actors 300 contains Template_Human_NPC timeout=15
+
+A ?actors 700

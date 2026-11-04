@@ -4,10 +4,13 @@ using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using MelonLoader;
 using TwitchSDK;
 using TwitchSDK.Interop;
 using UnityEngine;
+using HttpMethod = System.Net.Http.HttpMethod;
+using SdkHttpMethod = TwitchSDK.Interop.HttpMethod;
 
 namespace TwitchMod.Integration
 {
@@ -16,16 +19,28 @@ namespace TwitchMod.Integration
     /// </summary>
     internal class UnityTwitch(string clientId, bool useEventSubProxy = false) : TwitchSDKApi(clientId, useEventSubProxy)
     {
-        protected override PlatformAbstractionLayer CreatePAL() => new MelonPAL();
+        private MelonPAL? _pal;
+
+        protected override PlatformAbstractionLayer CreatePAL() => _pal = new MelonPAL();
+
+        /// <summary>
+        /// Posts <paramref name="message"/> in the channel as the logged-in streamer. Does nothing before the SDK made its first Helix call.
+        /// </summary>
+        public Task SendChatMessage(string channelId, string message) => _pal?.SendChatMessage(channelId, message) ?? Task.CompletedTask;
 
         private sealed class MelonPAL : ManagedPAL
         {
             private const string KeyringService = "DrovaTwitchMod";
+            private const string Helix = "https://api.twitch.tv/helix/";
             private readonly Dictionary<int, ClientWebSocket> _sockets = new();
             private int _nextSocket = 1;
 
             private readonly string _basePath = Application.persistentDataPath;
             private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+            /// <summary>The headers of the SDK's latest Helix call. The SDK has no chat call and keeps its token to itself.</summary>
+            private volatile string? _helixAuthorization;
+            private volatile string? _helixClientId;
 
             static MelonPAL()
             {
@@ -47,19 +62,26 @@ namespace TwitchMod.Integration
                 message.RequestUri = new Uri(req.Uri);
                 message.Method = req.Method switch
                 {
-                    TwitchSDK.Interop.HttpMethod.Get => System.Net.Http.HttpMethod.Get,
-                    TwitchSDK.Interop.HttpMethod.Post => System.Net.Http.HttpMethod.Post,
-                    TwitchSDK.Interop.HttpMethod.Put => System.Net.Http.HttpMethod.Put,
-                    TwitchSDK.Interop.HttpMethod.Patch => System.Net.Http.HttpMethod.Patch,
-                    TwitchSDK.Interop.HttpMethod.Delete => System.Net.Http.HttpMethod.Delete,
+                    SdkHttpMethod.Get => HttpMethod.Get,
+                    SdkHttpMethod.Post => HttpMethod.Post,
+                    SdkHttpMethod.Put => HttpMethod.Put,
+                    SdkHttpMethod.Patch => HttpMethod.Patch,
+                    SdkHttpMethod.Delete => HttpMethod.Delete,
                     _ => throw new ArgumentOutOfRangeException(nameof(req), req.Method, "Unsupported HTTP method."),
                 };
-                if (req.Method is TwitchSDK.Interop.HttpMethod.Post or TwitchSDK.Interop.HttpMethod.Put or TwitchSDK.Interop.HttpMethod.Patch)
+                if (req.Method is SdkHttpMethod.Post or SdkHttpMethod.Put or SdkHttpMethod.Patch)
                     message.Content = new StringContent(req.RequestBody, Encoding.UTF8, req.ContentType);
                 if (!string.IsNullOrEmpty(req.ClientId))
                     message.Headers.Add("Client-Id", req.ClientId);
                 if (!string.IsNullOrEmpty(req.Authorization))
+                {
                     message.Headers.Add("Authorization", req.Authorization);
+                    if (req.Uri.StartsWith(Helix, StringComparison.Ordinal))
+                    {
+                        _helixAuthorization = req.Authorization;
+                        _helixClientId = req.ClientId;
+                    }
+                }
                 message.Headers.UserAgent.Add(new ProductInfoHeaderValue(HttpUserAgent, "0.2"));
 
                 using HttpResponseMessage response = await _http.SendAsync(message).ConfigureAwait(false);
@@ -68,6 +90,30 @@ namespace TwitchMod.Integration
                     HttpStatus = (int)response.StatusCode,
                     ResponseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false)
                 };
+            }
+
+            public async Task SendChatMessage(string channelId, string text)
+            {
+                string? authorization = _helixAuthorization;
+                string? clientId = _helixClientId;
+                if (authorization == null || clientId == null)
+                    return;
+
+                using HttpRequestMessage message = new(HttpMethod.Post, Helix + "chat/messages");
+                message.Headers.Add("Client-Id", clientId);
+                message.Headers.Add("Authorization", authorization);
+                message.Content = new StringContent(JsonSerializer.Serialize(new { broadcaster_id = channelId, sender_id = channelId, message = text }),
+                    Encoding.UTF8, "application/json");
+                try
+                {
+                    using HttpResponseMessage response = await _http.SendAsync(message).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                        MelonLogger.Warning("[Twitch] Could not answer in chat: " + (int)response.StatusCode);
+                }
+                catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+                {
+                    MelonLogger.Warning("[Twitch] Could not answer in chat: " + e.Message);
+                }
             }
 
             /** ManagedPAL's websockets without its Console.WriteLine calls, which print every EventSub message,
