@@ -21,10 +21,6 @@ A ?items misc_currency
 A expect twitch_reward RandomItem contains True timeout=1
 A ?actors 600
 A expect twitch_reward Monster contains True timeout=1
-A expect twitch_reward Bandits contains True timeout=1
-sleep 3
-A ?actors 600
-A shot twitch_spawns.png
 
 A tpnear $olaf 0 80
 sleep 3
@@ -42,3 +38,9 @@ A expect dialogue contains "Red_Moor" timeout=10
 A skip
 A expect twitch_locked contains "interactable=True raycast=True digits=True" timeout=10
 A bye
+
+# After the poll, since the ambush bandits attack and a fight closes the dialogue.
+A expect twitch_reward Bandits contains True timeout=1
+sleep 3
+A ?actors 600
+A shot twitch_spawns.png

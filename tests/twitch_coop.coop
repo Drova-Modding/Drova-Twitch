@@ -17,7 +17,7 @@ B expect actors 400 contains Snapper timeout=10
 A expect actors 1500 contains Snapper timeout=10
 B twitch_reward Bandits
 B expect twitch_result contains True timeout=15
-B expect actors 500 contains Template_Human_NPC timeout=10
+B expect actors 500 contains Bandit timeout=10
 A expect actors 1500 contains Template_Human_NPC timeout=10
 B ?actors 600
 A ?actors 1500
@@ -33,4 +33,4 @@ B tp 40,1170
 sleep 8
 B twitch_reward Bandits
 B expect twitch_result contains True timeout=15
-B expect actors 600 contains Template_Human_NPC timeout=10
+B expect actors 600 contains Bandit timeout=10

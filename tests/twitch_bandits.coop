@@ -1,0 +1,27 @@
+# Bandit ambushes reach the streamer in co-op, from the host's redemption and from a client's. They spawn 260 to 420 away,
+# past their perception radius, so without being sent at the streamer they stood at their spawn point.
+# A client builds its copies from the bandit recipe, named Bandit, while the host's lazy bodies keep the template name.
+include ../../Drova-Coop-Mod/tests/scenarios/session.coop
+A invincible on
+B invincible on
+B tpnear me 30 0
+A twitch_reward Bandits
+A expect twitch_result contains True timeout=15
+A expect actors 120 Template_Human_NPC >= 2 timeout=25
+B expect actors 150 Bandit >= 2 timeout=10
+A twitch_reward Bandits
+A expect twitch_result contains True timeout=15
+A expect actors 120 Template_Human_NPC >= 4 timeout=25
+A twitch_reward Bandits
+A expect twitch_result contains True timeout=15
+A expect actors 120 Template_Human_NPC >= 6 timeout=25
+B expect actors 150 Bandit >= 6 timeout=10
+B tp -1750,-5262
+A tp -1700,-5100
+sleep 3
+B twitch_reward Bandits
+B expect twitch_result contains True timeout=15
+B expect actors 120 Bandit >= 2 timeout=25
+A expect actors 1500 Template_Human_NPC >= 8 timeout=10
+A shot tb_host.png
+B shot tb_client.png

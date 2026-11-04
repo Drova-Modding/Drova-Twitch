@@ -1,3 +1,4 @@
+using Drova_Modding_API.Systems.Testing;
 using UnityEngine;
 using MelonLoader;
 using TwitchMod.Interactions;
@@ -17,7 +18,13 @@ namespace TwitchMod.Integration
         private void Start()
         {
             name = "TwitchManager";
-            Twitch = new UnityTwitch(ClientId);
+
+            // The login is stored for the whole PC, so a test game would subscribe to the streamer's real channel too.
+            if (LaunchProfile.Name == null || LaunchProfile.ReadArgument("--twitch") != null)
+                Twitch = new UnityTwitch(ClientId);
+            else
+                MelonLogger.Msg("[Twitch] Not connecting: started with a test profile and without --twitch.");
+
             gameObject.AddComponent<AuthManager>();
             gameObject.AddComponent<RewardManager>();
             gameObject.AddComponent<PollManager>();

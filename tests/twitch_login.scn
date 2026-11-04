@@ -1,7 +1,7 @@
 # Checks the real Twitch lookups with a manual login: the logged-in channel's name, and that entwicklerwg resolves.
 # Log in by hand under Options, Modding, Twitch when the game is up.
 
-launch A
+launch A --twitch 1
 A wait ready=1 timeout=240
 A realinput on
 A wait named=1 timeout=900
