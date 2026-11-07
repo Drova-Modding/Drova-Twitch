@@ -28,6 +28,12 @@ namespace TwitchMod.Interactions
         private const int MaxRaidGold = 5000;
         private const float BodyLoadSeconds = 30f;
         private const float BanditSpread = 30f;
+
+        /// <summary>
+        /// How far from their spawn bandits keep chasing. The game measures the leash from where the chase began, and
+        /// they spawn up to 420 away, so the streamer gets about a chunk of room to run.
+        /// </summary>
+        private const float BanditChaseRange = 1600f;
         private const int BleedShare = 4;
         private const int FoodGroup = 0;
         private const float FoodReplaceChance = 0.5f;
@@ -167,7 +173,7 @@ namespace TwitchMod.Interactions
                 Vector2 position = anchor.Value + Random.insideUnitCircle * BanditSpread;
                 bandits.Add(BanditCreator.CreateRandomBanditLazy("Bandit", position, difficulty));
             }
-            EnemyAccess.MakeAggressiveGroup(bandits, BanditRange.y + BanditSpread, NearestPlayer(origin));
+            EnemyAccess.MakeAggressiveGroup(bandits, BanditChaseRange, NearestPlayer(origin));
             if (raiders > 0)
                 MelonCoroutines.Start(GiveGoldWhenBuilt(bandits, Math.Max(1, Math.Min(raiders * GoldPerRaider, MaxRaidGold) / count)));
             return true;
