@@ -1,0 +1,35 @@
+# The dialogue poll run in chat, with raw IRC lines standing in for Twitch chat.
+# Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
+
+default hero 5
+default slot 0
+set olaf 52b3d368-a4c0-4a62-9542-1f597c3e669b
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A tpnear $olaf 0 80
+sleep 3
+A talk $olaf
+A skip
+# Chat polls take any number of answers, Twitch polls at most five.
+A expect dialogue contains "4:I've got to go" timeout=15
+A expect twitch_locked contains "key=True" timeout=1
+A twitch_poll 5
+A expect twitch_locked contains "voting=True interactable=False raycast=False digits=False" timeout=3
+# Answer 2 wins in chat, with and without "!", and viewer2 changes their mind to it. Other chat does not count.
+A twitch_chat :viewer1!viewer1@viewer1.tmi.twitch.tv PRIVMSG streamer :2
+A twitch_chat :viewer2!viewer2@viewer2.tmi.twitch.tv PRIVMSG streamer :!1
+A twitch_chat :viewer2!viewer2@viewer2.tmi.twitch.tv PRIVMSG streamer :!2 this one
+A twitch_chat :viewer3!viewer3@viewer3.tmi.twitch.tv PRIVMSG streamer :4
+A twitch_chat :viewer4!viewer4@viewer4.tmi.twitch.tv PRIVMSG streamer :7
+A twitch_chat :viewer5!viewer5@viewer5.tmi.twitch.tv PRIVMSG streamer :12 seconds left
+A expect twitch_locked contains "voting=True" timeout=1
+A expect twitch_locked contains "voting=False" timeout=10
+A expect dialogue contains "Red_Moor" timeout=10
+A skip
+A expect twitch_locked contains "interactable=True raycast=True digits=True" timeout=10
+A bye

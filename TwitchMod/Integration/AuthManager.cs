@@ -38,6 +38,11 @@ namespace TwitchMod.Integration
         /// </summary>
         public static string? ChannelId { get; private set; }
 
+        /// <summary>
+        /// The logged-in channel's broadcaster type: "partner", "affiliate", or empty for neither. Null until Twitch answered.
+        /// </summary>
+        public static string? BroadcasterType { get; internal set; }
+
         private void Update()
         {
             UnityTwitch? twitch = TwitchManager.Twitch;
@@ -60,6 +65,7 @@ namespace TwitchMod.Integration
                         _status = state.Status;
                         LoginName = null;
                         ChannelId = null;
+                        BroadcasterType = null;
                         MelonLogger.Msg("[Twitch] " + _status);
                     }
                 }
@@ -75,6 +81,7 @@ namespace TwitchMod.Integration
                 {
                     LoginName = _userInfoTask.MaybeResult?.LoginName;
                     ChannelId = _userInfoTask.MaybeResult?.ChannelId;
+                    BroadcasterType = _userInfoTask.MaybeResult?.BroadcasterType;
                     MelonLogger.Msg("[Twitch] Logged in as " + LoginName);
                 }
                 _userInfoTask = null;
