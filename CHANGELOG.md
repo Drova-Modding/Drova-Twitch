@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0] - 2026-11-07
+### Added
+- Dialogue polls and boss predictions work in chat, for channels without Affiliate or Partner.
+  Viewers vote with the answer's number (`1` or `!1`) or with `!yes` / `!no`, and a viewer's latest vote counts.
+  The prediction result is posted in chat. Chat polls take any number of answers, Twitch polls at most five.
+
+### Changed
+- One Channel type switch, Affiliate / Partner or Chat only, replaces the "Rewards through" switch and covers rewards, polls and predictions.
+  A channel Twitch reports without Affiliate or Partner always uses chat, and the switch is hidden for it.
+- The chat command cooldown is per viewer. The monster, bandit, elite and effect rewards keep their own short cooldown for the whole chat.
+- Every viewer who uses a command too early is told once in chat when it is ready for them, instead of one reply per 5 s for the whole chat.
+- Ambush and raid bandits keep chasing the streamer much further before they give up.
+
+### Fixed
+- Logging out or switching the rewards no longer logs an "Unhandled exception: terminating stream" warning.
+
 ## [1.2.0] - 2026-11-04
 ### Added
 - A toast in the top right shows which viewer redeemed which reward.
