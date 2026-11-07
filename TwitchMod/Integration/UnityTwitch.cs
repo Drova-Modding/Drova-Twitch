@@ -46,7 +46,8 @@ namespace TwitchMod.Integration
             {
                 TaskScheduler.UnobservedTaskException += (_, e) =>
                 {
-                    if (e.Exception.InnerException is CoreLibraryException twitchException)
+                    // Disposing an EventStream faults its private pending wait with "terminating stream", which only means it closed.
+                    if (e.Exception.InnerException is CoreLibraryException twitchException && twitchException.Message != "terminating stream")
                         MelonLogger.Warning("[Twitch] Unhandled exception: " + twitchException);
                 };
             }
@@ -97,7 +98,10 @@ namespace TwitchMod.Integration
                 string? authorization = _helixAuthorization;
                 string? clientId = _helixClientId;
                 if (authorization == null || clientId == null)
+                {
+                    MelonLogger.Warning("[Twitch] Could not answer in chat: no Twitch API call seen yet.");
                     return;
+                }
 
                 using HttpRequestMessage message = new(HttpMethod.Post, Helix + "chat/messages");
                 message.Headers.Add("Client-Id", clientId);
