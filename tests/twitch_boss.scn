@@ -13,11 +13,15 @@ A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
 A twitch_boss Snapper
 A expect twitch_fight == none timeout=1
 
-# Won: the boss dies.
+# Won: the boss dies. A channel without Affiliate or Partner predicts in chat, a viewer's latest vote counts.
+A expect twitch_type contains chat=True timeout=1
 A twitch_reward Monster
 A expect twitch_fight contains "fighting Snapper" timeout=10
+A twitch_chat :viewer1!viewer1@viewer1.tmi.twitch.tv PRIVMSG streamer :!no
+A twitch_chat :viewer1!viewer1@viewer1.tmi.twitch.tv PRIVMSG streamer :!YES
+A twitch_chat :viewer2!viewer2@viewer2.tmi.twitch.tv PRIVMSG streamer :!no
 A hit Snapper(Clone) 99999 pure nosource
-A expect twitch_fight contains "Yes Snapper" timeout=5
+A expect twitch_fight contains "Yes Snapper 1/2" timeout=5
 
 # Fled: the streamer leaves for longer than the grace time.
 A twitch_reward Monster

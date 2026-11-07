@@ -7,6 +7,7 @@ using Il2CppDrova;
 using Il2CppDrova.GlobalVarSystem;
 using Il2CppInterop.Runtime.Attributes;
 using MelonLoader;
+using TwitchMod.Interactions;
 using TwitchSDK;
 using TwitchSDK.Interop;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace TwitchMod.Integration
     /// Runs a "Will I beat the boss?" channel points prediction. It opens when the streamer comes near a boss,
     /// voting closes after a short window, and it resolves when the boss or the streamer goes down.
     /// Leaving the fight or anything unclear cancels it, which refunds every vote.
+    /// In chat mode viewers vote !yes or !no in chat instead, and the result is posted there.
     /// </summary>
     [RegisterTypeInIl2Cpp]
     internal class PredictionManager(IntPtr ptr) : MonoBehaviour(ptr)
@@ -60,6 +62,12 @@ namespace TwitchMod.Integration
         private Actor? _bossActor;
         private Actor? _player;
         private GameTask<Prediction>? _prediction;
+
+        /// <summary>
+        /// Each viewer's predicted outcome while a chat prediction runs, null otherwise.
+        /// </summary>
+        private Dictionary<string, string>? _chatVotes;
+        private float _chatVotingEndsAt;
         private string? _result;
         private float _nextScan;
         private float _startedAt;
@@ -104,7 +112,7 @@ namespace TwitchMod.Integration
             if (outcome != Win && outcome != Loss)
                 _cooldownUntil[_boss.Name] = Time.unscaledTime + RetryCooldown;
 
-            _result = _prediction != null ? outcome : null;
+            _result = _prediction != null || _chatVotes != null ? outcome : null;
             _boss = null;
             _bossActor = null;
             ApplyResult();
@@ -174,20 +182,61 @@ namespace TwitchMod.Integration
         [HideFromIl2Cpp]
         private void OpenPrediction(Boss boss)
         {
+            string title = "Will I beat " + boss.Name + "?";
+            if (RewardManager.ChatMode)
+            {
+                _chatVotes = new Dictionary<string, string>();
+                _chatVotingEndsAt = Time.unscaledTime + VotingSeconds;
+                TwitchManager.Say(title + " Type !yes or !no within " + VotingSeconds + " s.");
+                return;
+            }
+
             UnityTwitch? twitch = TwitchManager.Twitch;
             if (twitch == null || _authManager == null || !_authManager.IsLoggedIn || _prediction != null)
                 return;
 
             _prediction = twitch.NewPrediction(new PredictionDefinition
             {
-                Title = "Will I beat " + boss.Name + "?",
+                Title = title,
                 Outcomes = [Win, Loss],
                 Duration = VotingSeconds
             });
         }
 
+        /// <summary>
+        /// Counts a chat vote while a chat prediction takes votes. A viewer's latest vote counts.
+        /// Returns whether <paramref name="text"/> was a vote.
+        /// </summary>
+        public bool OnChatVote(string viewer, string text)
+        {
+            if (_chatVotes == null || Time.unscaledTime > _chatVotingEndsAt)
+                return false;
+
+            string command = text.Trim().Split(' ', 2)[0];
+            string? vote = string.Equals(command, "!" + Win, StringComparison.OrdinalIgnoreCase) ? Win
+                : string.Equals(command, "!" + Loss, StringComparison.OrdinalIgnoreCase) ? Loss : null;
+            if (vote == null)
+                return false;
+
+            _chatVotes[viewer] = vote;
+            return true;
+        }
+
         private void ApplyResult()
         {
+            if (_chatVotes != null && _result != null)
+            {
+                string chatResult = _result;
+                int right = _chatVotes.Values.Count(vote => vote == chatResult);
+                TwitchManager.Say(chatResult is Win or Loss
+                    ? "Prediction result: " + chatResult + ". " + right + " of " + _chatVotes.Count + " predicted it."
+                    : "Prediction cancelled (" + chatResult + ").");
+                _lastFight += " " + right + "/" + _chatVotes.Count;
+                _chatVotes = null;
+                _result = null;
+                return;
+            }
+
             if (_prediction == null || _result == null || !_prediction.IsCompleted)
                 return;
 

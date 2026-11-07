@@ -402,3 +402,6 @@ FodyWeavers.xsd
 
 # Packaged mod artifacts
 dist/
+# Test runner output
+tests/failed-logs/
+tests/recordings/

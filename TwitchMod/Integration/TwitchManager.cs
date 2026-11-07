@@ -15,6 +15,16 @@ namespace TwitchMod.Integration
         /// </summary>
         public static UnityTwitch? Twitch { get; private set; }
 
+        /// <summary>
+        /// Posts <paramref name="text"/> in the logged-in channel's chat. Does nothing while logged out.
+        /// </summary>
+        public static void Say(string text)
+        {
+            string? channelId = AuthManager.ChannelId;
+            if (Twitch != null && channelId != null)
+                _ = Twitch.SendChatMessage(channelId, text);
+        }
+
         private void Start()
         {
             name = "TwitchManager";

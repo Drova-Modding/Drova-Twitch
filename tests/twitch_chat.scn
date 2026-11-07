@@ -16,8 +16,10 @@ A expect twitch_result contains True timeout=10
 A ?items item_potion_health_0
 A shot twitch_chat_toast.png
 
-# The cooldown holds the second use back, and plain chat and server lines do nothing.
-A expect twitch_chat :viewer43!viewer43@viewer43.tmi.twitch.tv PRIVMSG streamer :!healingpotion contains refused timeout=1
+# The cooldown is per viewer: it holds viewer42's next command back but not another viewer's.
+# Plain chat and server lines do nothing.
+A expect twitch_chat :viewer42!viewer42@viewer42.tmi.twitch.tv PRIVMSG streamer :!gold contains refused timeout=1
+A expect twitch_chat :viewer43!viewer43@viewer43.tmi.twitch.tv PRIVMSG streamer :!healingpotion contains True timeout=1
 A expect twitch_chat :viewer44!viewer44@viewer44.tmi.twitch.tv PRIVMSG streamer :hello there contains refused timeout=1
 A expect twitch_chat PING :tmi.twitch.tv contains unparsed timeout=1
 A expect twitch_chat :viewer45!viewer45@viewer45.tmi.twitch.tv PRIVMSG streamer :!gold contains True timeout=1

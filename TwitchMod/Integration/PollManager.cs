@@ -19,7 +19,7 @@ namespace TwitchMod.Integration
 {
     /// <summary>
     /// Lets chat pick a dialogue answer. The streamer presses the poll key while answers are shown, the answers
-    /// become a Twitch poll and stay locked until the winner is selected.
+    /// become a Twitch poll, or a vote in chat in chat mode, and stay locked until the winner is selected.
     /// </summary>
     [RegisterTypeInIl2Cpp]
     internal class PollManager(IntPtr ptr) : MonoBehaviour(ptr)
@@ -57,12 +57,27 @@ namespace TwitchMod.Integration
         private string[] _titles = [];
         private int[] _values = [];
 
+        /// <summary>
+        /// Each viewer's answer index while a chat poll runs, null otherwise.
+        /// </summary>
+        private Dictionary<string, int>? _chatVotes;
+        private float _chatEndsAt;
+
         private void Start()
         {
             _authManager = GetComponent<AuthManager>();
 
 #if DEBUG
-            TestAgent.RegisterCommand("twitch_poll", _ => BeginVote() ? string.Join(" | ", _titles) : throw new InvalidOperationException("no answers to vote on"));
+            // With seconds, the poll runs in chat for that long.
+            TestAgent.RegisterCommand("twitch_poll", seconds =>
+            {
+                bool chat = seconds.Trim().Length > 0;
+                if (!BeginVote(chat ? int.MaxValue : MaxChoices))
+                    throw new InvalidOperationException("no answers to vote on");
+                if (chat)
+                    StartChatVote(int.Parse(seconds.Trim()));
+                return string.Join(" | ", _titles);
+            });
             TestAgent.RegisterCommand("twitch_vote", rest =>
             {
                 long[] votes = rest.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(long.Parse).ToArray();
@@ -114,6 +129,13 @@ namespace TwitchMod.Integration
 
             SetLocked(group, true);
 
+            if (_chatVotes != null)
+            {
+                if (Time.unscaledTime >= _chatEndsAt)
+                    Resolve(ChatResult(_chatVotes));
+                return;
+            }
+
             if (_poll == null || !_poll.IsCompleted)
                 return;
 
@@ -152,15 +174,52 @@ namespace TwitchMod.Integration
                 return;
             }
 
-            if (!BeginVote())
+            // A Twitch poll takes at most five answers, chat takes any number.
+            if (!BeginVote(RewardManager.ChatMode ? int.MaxValue : MaxChoices))
                 return;
 
             int seconds = RewardManager.GetInt(PollSecondsKey, PollSecondsDefault);
-            _poll = twitch.NewPoll(new PollDefinition { Title = PollTitle, Choices = _titles, Duration = seconds });
+            if (RewardManager.ChatMode)
+                StartChatVote(seconds);
+            else
+                _poll = twitch.NewPoll(new PollDefinition { Title = PollTitle, Choices = _titles, Duration = seconds });
             MelonLogger.Msg("[Twitch] Poll started, chat decides the answer within " + seconds + " s.");
         }
 
-        private bool BeginVote()
+        /// <summary>
+        /// Runs the poll in chat instead of as a Twitch poll, which needs an Affiliate or Partner channel.
+        /// </summary>
+        private void StartChatVote(int seconds)
+        {
+            _chatVotes = new Dictionary<string, int>();
+            _chatEndsAt = Time.unscaledTime + seconds;
+            TwitchManager.Say(PollTitle + " Type 1 to " + _titles.Length + " within " + seconds + " s: " + string.Join(" | ", _titles));
+        }
+
+        /// <summary>
+        /// Counts a chat vote while a chat poll runs: the answer's number, with or without "!". A viewer's latest vote counts.
+        /// Returns whether <paramref name="text"/> was a vote.
+        /// </summary>
+        public bool OnChatVote(string viewer, string text)
+        {
+            if (_chatVotes == null || !int.TryParse(text.Trim().Split(' ', 2)[0].TrimStart('!'), out int choice) || choice < 1 || choice > _titles.Length)
+                return false;
+
+            _chatVotes[viewer] = choice - 1;
+            return true;
+        }
+
+        [HideFromIl2Cpp]
+        private PollInfo ChatResult(Dictionary<string, int> votes)
+        {
+            return new PollInfo
+            {
+                Status = PollStatus.Completed,
+                Choices = _titles.Select([HideFromIl2Cpp] (title, i) => new PollChoiceInfo { Title = title, Votes = votes.Values.Count(vote => vote == i) }).ToArray()
+            };
+        }
+
+        private bool BeginVote(int maxChoices)
         {
             DS_GUI_DialogueOptionsGroup? group = GetOptionsGroup();
             if (_ui == null || _request == null || group == null || !IsRequestCurrent())
@@ -175,9 +234,9 @@ namespace TwitchMod.Integration
                 values.Add(option.Value);
             }
 
-            if (titles.Count < 2 || titles.Count > MaxChoices)
+            if (titles.Count < 2 || titles.Count > maxChoices)
             {
-                MelonLogger.Warning("[Twitch] A poll needs 2 to " + MaxChoices + " answers, this one has " + titles.Count + ".");
+                MelonLogger.Warning("[Twitch] Cannot poll " + titles.Count + " answers: a poll needs at least 2, a Twitch poll takes at most " + MaxChoices + ".");
                 return false;
             }
 
@@ -235,6 +294,7 @@ namespace TwitchMod.Integration
         {
             _voting = false;
             _poll = null;
+            _chatVotes = null;
             if (unlock != null)
                 SetLocked(unlock, false);
         }

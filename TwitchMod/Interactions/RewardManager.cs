@@ -36,7 +36,8 @@ namespace TwitchMod.Interactions
         private const int ChatCooldownDefault = 120;
         private const int MinChatCooldown = 10;
         private const int MaxChatCooldown = 3600;
-        private const float ReplyInterval = 5f;
+        private const float ReplyInterval = 1f;
+        private const float HelpInterval = 30f;
         private const string HelpCommand = "!drova";
         private const string ChannelEventsLockName = @"Local\DrovaTwitchMod_ChannelEvents";
 
@@ -80,8 +81,13 @@ namespace TwitchMod.Interactions
         private Task? _signOutTask;
         private TwitchChat? _chat;
         private bool _rewardsEnabled;
-        private bool _chatEnabled;
+        private static bool _chatSwitch;
         private float _nextReply;
+        private float _nextHelp;
+        private readonly Dictionary<string, float> _viewerReadyAt = new();
+        private readonly Dictionary<string, float> _viewerTold = new();
+        private PollManager? _polls;
+        private PredictionManager? _predictions;
 #if DEBUG
         private string _lastTestResult = "none";
         private GameTask<UserInfo>? _userLookup;
@@ -93,10 +99,13 @@ namespace TwitchMod.Interactions
         private GameObject? _logInHint;
         private GameObject? _logOut;
         private GameObject? _rewardsSwitch;
+        private GameObject? _modeSwitch;
 
         private void Start()
         {
             _authManager = GetComponent<AuthManager>();
+            _polls = GetComponent<PollManager>();
+            _predictions = GetComponent<PredictionManager>();
             PlayerAccess.OnPlayerFound += player => _player = player;
 
             LocalizationAccess.CreateLocalizationEntries(
@@ -113,8 +122,8 @@ namespace TwitchMod.Interactions
                 new("LogOut", "Abmelden", ELanguage.de),
                 new("Disclaimer", "Channel point costs are updated on Twitch when this menu closes.", ELanguage.en),
                 new("Disclaimer", "Die Kanalpunkte-Kosten werden beim Schließen des Menüs auf Twitch aktualisiert.", ELanguage.de),
-                new("Rewards", "Channel point rewards", ELanguage.en),
-                new("Rewards", "Kanalpunkte-Belohnungen", ELanguage.de),
+                new("Rewards", "Viewer rewards", ELanguage.en),
+                new("Rewards", "Zuschauer-Belohnungen", ELanguage.de),
                 new("Predictions", "Boss predictions", ELanguage.en),
                 new("Predictions", "Boss-Vorhersagen", ELanguage.de),
                 new("On", "On", ELanguage.en),
@@ -145,22 +154,22 @@ namespace TwitchMod.Interactions
                 new("StatusEffect", "Kosten zufälliger Effekt", ELanguage.de),
                 new("Toast", "[viewer] redeemed [reward]", ELanguage.en),
                 new("Toast", "[viewer] hat [reward] eingelöst", ELanguage.de),
-                new("RewardsVia", "Rewards through", ELanguage.en),
-                new("RewardsVia", "Belohnungen über", ELanguage.de),
-                new("ChannelPoints", "Channel points", ELanguage.en),
-                new("ChannelPoints", "Kanalpunkte", ELanguage.de),
-                new("ChatCommands", "Chat commands", ELanguage.en),
-                new("ChatCommands", "Chat-Befehle", ELanguage.de),
-                new("ChatHint", "Channel points need an Affiliate or Partner channel. Chat commands work on any channel: viewers type !gold, !monster and the other reward names, free but with a cooldown.", ELanguage.en),
-                new("ChatHint", "Kanalpunkte brauchen einen Affiliate- oder Partner-Kanal. Chat-Befehle gehen auf jedem Kanal: Zuschauer schreiben !gold, !monster und die anderen Belohnungsnamen, kostenlos, aber mit Abklingzeit.", ELanguage.de),
+                new("ChannelType", "Channel type", ELanguage.en),
+                new("ChannelType", "Kanaltyp", ELanguage.de),
+                new("Partner", "Affiliate / Partner", ELanguage.en),
+                new("Partner", "Affiliate / Partner", ELanguage.de),
+                new("ChatOnly", "Chat only", ELanguage.en),
+                new("ChatOnly", "Nur Chat", ELanguage.de),
+                new("ChatHint", "Affiliate and Partner channels use channel points, Twitch polls and predictions. Chat only works on any channel: viewers type !gold, !monster and the other reward names, with a cooldown per viewer, and vote on polls and predictions in chat. A channel without Affiliate or Partner always uses chat.", ELanguage.en),
+                new("ChatHint", "Affiliate- und Partner-Kanäle nutzen Kanalpunkte, Twitch-Umfragen und -Vorhersagen. Nur Chat geht auf jedem Kanal: Zuschauer schreiben !gold, !monster und die anderen Belohnungsnamen, mit Abklingzeit pro Zuschauer, und stimmen im Chat über Umfragen und Vorhersagen ab. Ein Kanal ohne Affiliate oder Partner nutzt immer den Chat.", ELanguage.de),
                 new("RaidToast", "[raider] raids with [viewers] viewers! Bandits are coming, and they carry gold.", ELanguage.en),
                 new("RaidToast", "[raider] raidet mit [viewers] Zuschauern! Banditen kommen, und sie tragen Gold.", ELanguage.de),
-                new("Help", "Drova chat commands: [commands]. Each one has a cooldown.", ELanguage.en),
-                new("Help", "Drova-Chat-Befehle: [commands]. Jeder hat eine Abklingzeit.", ELanguage.de),
-                new("CooldownReply", "@[viewer] [command] is ready again in [seconds] s.", ELanguage.en),
-                new("CooldownReply", "@[viewer] [command] ist in [seconds] s wieder bereit.", ELanguage.de),
-                new("ChatCooldown", "Chat command cooldown (seconds)", ELanguage.en),
-                new("ChatCooldown", "Abklingzeit der Chat-Befehle (Sekunden)", ELanguage.de),
+                new("Help", "Drova chat commands: [commands]. Each viewer can use one every [seconds] s.", ELanguage.en),
+                new("Help", "Drova-Chat-Befehle: [commands]. Jeder Zuschauer kann alle [seconds] s einen nutzen.", ELanguage.de),
+                new("CooldownReply", "@[viewer] [command] is ready for you again in [seconds] s.", ELanguage.en),
+                new("CooldownReply", "@[viewer] [command] ist für dich in [seconds] s wieder bereit.", ELanguage.de),
+                new("ChatCooldown", "Chat command cooldown per viewer (seconds)", ELanguage.en),
+                new("ChatCooldown", "Abklingzeit der Chat-Befehle pro Zuschauer (Sekunden)", ELanguage.de),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.en),
                 new(SpeziItemId + "_name", "Spezi", ELanguage.de),
                 new(SpeziItemId + "_description", "Es ist so lecker, dass man fast einen ganzen Tisch davon vollstellen möchte oder 2? Naja Hauptsache Willi wird nicht vergessen", ELanguage.en),
@@ -171,6 +180,11 @@ namespace TwitchMod.Interactions
             TestAgent.RegisterCommand("twitch_reward", TestReward);
             TestAgent.RegisterCommand("twitch_result", _ => _lastTestResult);
             TestAgent.RegisterCommand("twitch_channel", name => AuthManager.LoginName = name.Trim());
+            TestAgent.RegisterCommand("twitch_type", type =>
+            {
+                AuthManager.BroadcasterType = type.Trim();
+                return "chat=" + ChatMode;
+            });
             TestAgent.RegisterCommand("twitch_user", login =>
             {
                 _userLookup = (TwitchManager.Twitch ?? throw new InvalidOperationException("no twitch")).GetUserInfoByLoginName(login.Trim());
@@ -213,12 +227,12 @@ namespace TwitchMod.Interactions
 #endif
 
             _rewardsEnabled = RewardsOn();
-            _chatEnabled = ChatCommandsOn();
+            _chatSwitch = ChatSwitchOn();
             OptionMenuAccess.Instance.OnOptionMenuOpen += BuildOptions;
             OptionMenuAccess.Instance.OnOptionMenuClose += () =>
             {
                 _rewardsEnabled = RewardsOn();
-                _chatEnabled = ChatCommandsOn();
+                _chatSwitch = ChatSwitchOn();
                 if (!_registeredCosts.SequenceEqual(Definitions().Select(definition => (int)definition.Cost)))
                     _registerTask = null;
             };
@@ -262,6 +276,10 @@ namespace TwitchMod.Interactions
             }
 
             ReadRaids(twitch);
+
+            // The broadcaster type decides between channel points and chat commands.
+            if (AuthManager.BroadcasterType == null)
+                return;
 
             if (_registerTask == null)
             {
@@ -353,6 +371,9 @@ namespace TwitchMod.Interactions
                         _signOutTask = ReplaceRewards(() => twitch.ReplaceCustomRewards().Task);
                     ShowAccount(false);
                 })
+                .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "ChannelType"), LocalizationAccess.GetLocalizedString(ModName, "ChatOnly"),
+                    LocalizationAccess.GetLocalizedString(ModName, "Partner"), ChatModeKey)
+                .CreateDisclaimer(LocalizationAccess.GetLocalizedString(ModName, "ChatHint"))
                 .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "Rewards"), LocalizationAccess.GetLocalizedString(ModName, "On"),
                     LocalizationAccess.GetLocalizedString(ModName, "Off"), RewardsEnabledKey, true)
                 .CreateDisclaimer(LocalizationAccess.GetLocalizedString(ModName, "Disclaimer"));
@@ -362,9 +383,6 @@ namespace TwitchMod.Interactions
                 .CreateSlider(LocalizationAccess.GetLocalizedString(ModName, "PollSeconds"), PollManager.PollSecondsKey, MinPollSeconds, MaxPollSeconds, PollManager.PollSecondsDefault)
                 .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "Predictions"), LocalizationAccess.GetLocalizedString(ModName, "On"),
                     LocalizationAccess.GetLocalizedString(ModName, "Off"), PredictionManager.EnabledKey, true)
-                .CreateSwitch(LocalizationAccess.GetLocalizedString(ModName, "RewardsVia"), LocalizationAccess.GetLocalizedString(ModName, "ChatCommands"),
-                    LocalizationAccess.GetLocalizedString(ModName, "ChannelPoints"), ChatModeKey)
-                .CreateDisclaimer(LocalizationAccess.GetLocalizedString(ModName, "ChatHint"))
                 .CreateSlider(LocalizationAccess.GetLocalizedString(ModName, "ChatCooldown"), ChatCooldownKey, MinChatCooldown, MaxChatCooldown, ChatCooldownDefault)
                 .CreateInputActionSection([new(LocalizationAccess.GetLocalizedString(ModName, "PollKey"), PollManager.StartAction)])
                 .Build();
@@ -372,7 +390,8 @@ namespace TwitchMod.Interactions
             _logIn = rows[1];
             _logInHint = rows[2];
             _logOut = rows[3];
-            _rewardsSwitch = rows[4];
+            _modeSwitch = rows[4];
+            _rewardsSwitch = rows[6];
             ShowAccount(_authManager != null && _authManager.IsLoggedIn);
         }
 
@@ -386,6 +405,9 @@ namespace TwitchMod.Interactions
                 _logOut.SetActive(loggedIn);
             if (_rewardsSwitch != null)
                 _rewardsSwitch.SetActive(loggedIn);
+            // A channel without Affiliate or Partner has no choice to make.
+            if (_modeSwitch != null)
+                _modeSwitch.SetActive(AuthManager.BroadcasterType != string.Empty);
         }
 
         /// <summary>
@@ -398,12 +420,17 @@ namespace TwitchMod.Interactions
 
         private static bool RewardsOn() => !ConfigAccessor.TryGetConfigValue(RewardsEnabledKey, out bool value) || value;
 
-        /// <summary>Whether the rewards run as chat commands instead of channel points. Only one of the two is ever active.</summary>
-        private static bool ChatCommandsOn() => RewardsOn() && ConfigAccessor.TryGetConfigValue(ChatModeKey, out bool value) && value;
+        private static bool ChatSwitchOn() => ConfigAccessor.TryGetConfigValue(ChatModeKey, out bool value) && value;
+
+        /// <summary>
+        /// Whether rewards, polls and predictions run over chat instead of channel points and Twitch's own polls and predictions.
+        /// A channel Twitch reports without Affiliate or Partner always does, because the others fail there.
+        /// </summary>
+        public static bool ChatMode => _chatSwitch || AuthManager.BroadcasterType == string.Empty;
 
         private static CustomRewardDefinition[] Definitions()
         {
-            return RewardsOn() && !ChatCommandsOn() ? Rewards.Select(reward => reward.ToDefinition()).ToArray() : [];
+            return RewardsOn() && !ChatMode ? Rewards.Select(reward => reward.ToDefinition()).ToArray() : [];
         }
 
         /// <summary>
@@ -448,13 +475,13 @@ namespace TwitchMod.Interactions
         }
 
         /// <summary>
-        /// Runs chat commands while they are switched on. Only the Drova holding the channel events reads chat,
+        /// Reads chat commands and votes in chat mode. Only the Drova holding the channel events reads chat,
         /// so a second game on the PC does not apply every command twice.
         /// </summary>
         private void ReadChat()
         {
             string? channel = AuthManager.LoginName;
-            bool reading = _chatEnabled && _ownsChannelEvents && _authManager != null && _authManager.IsLoggedIn && channel != null;
+            bool reading = ChatMode && _ownsChannelEvents && _authManager != null && _authManager.IsLoggedIn && channel != null;
             if (_chat != null && (!reading || _chat.Channel != channel))
             {
                 _chat.Dispose();
@@ -466,22 +493,28 @@ namespace TwitchMod.Interactions
             if (_chat == null)
             {
                 _chat = new TwitchChat(channel!);
-                ReplyInChat(HelpText());
+                if (_rewardsEnabled)
+                    TwitchManager.Say(HelpText());
             }
             while (_chat.Messages.TryDequeue(out (string Viewer, string Text) message))
                 OnChat(message.Viewer, message.Text, null);
         }
 
         /// <summary>
-        /// Delivers the reward a chat command names. Returns whether it was one and off cooldown.
+        /// Counts a poll or prediction vote, or delivers the reward a chat command names.
+        /// Returns whether it was a reward and off cooldown.
         /// </summary>
         [HideFromIl2Cpp]
         private bool OnChat(string viewer, string text, Action<bool>? done)
         {
+            if ((_polls != null && _polls.OnChatVote(viewer, text)) || (_predictions != null && _predictions.OnChatVote(viewer, text)) || !_rewardsEnabled)
+                return false;
+
             string command = text.Trim().Split(' ', 2)[0];
             if (string.Equals(command, HelpCommand, StringComparison.OrdinalIgnoreCase))
             {
-                ReplyInChat(HelpText());
+                if (Time.unscaledTime >= _nextHelp && ReplyInChat(HelpText()))
+                    _nextHelp = Time.unscaledTime + HelpInterval;
                 return false;
             }
 
@@ -489,21 +522,33 @@ namespace TwitchMod.Interactions
             if (reward == null)
                 return false;
 
-            if (Time.unscaledTime < reward.ChatReadyAt)
+            // The reward's own cooldown holds for the whole chat, as with channel points. The chat cooldown holds per viewer.
+            float readyAt = Math.Max(reward.ReadyAt, _viewerReadyAt.GetValueOrDefault(viewer));
+            if (Time.unscaledTime < readyAt)
             {
-                int seconds = Mathf.CeilToInt(reward.ChatReadyAt - Time.unscaledTime);
-                ReplyInChat(Localized("CooldownReply").Replace("[viewer]", viewer).Replace("[command]", command).Replace("[seconds]", seconds.ToString()));
+                // One reply per viewer and cooldown, so spamming a command does not spam chat back.
+                int seconds = Mathf.CeilToInt(readyAt - Time.unscaledTime);
+                if (_viewerTold.GetValueOrDefault(viewer) != readyAt
+                    && ReplyInChat(Localized("CooldownReply").Replace("[viewer]", viewer).Replace("[command]", command).Replace("[seconds]", seconds.ToString())))
+                    _viewerTold[viewer] = readyAt;
                 return false;
             }
 
-            reward.ChatReadyAt = Time.unscaledTime + Math.Max(reward.CooldownSeconds, GetInt(ChatCooldownKey, ChatCooldownDefault));
+            // ponytail: one entry per viewer who used a command this session, prune if chats get huge.
+            _viewerReadyAt[viewer] = Time.unscaledTime + GetInt(ChatCooldownKey, ChatCooldownDefault);
+            reward.ReadyAt = Time.unscaledTime + reward.CooldownSeconds;
             Deliver(reward, applied =>
             {
                 MelonLogger.Msg("[Twitch] " + viewer + " used " + command + (applied ? "." : ", it could not be applied."));
                 if (applied)
+                {
                     ShowToast(viewer, reward);
+                }
                 else
-                    reward.ChatReadyAt = 0f;
+                {
+                    _viewerReadyAt.Remove(viewer);
+                    reward.ReadyAt = 0f;
+                }
                 done?.Invoke(applied);
                 return Task.CompletedTask;
             });
@@ -512,19 +557,22 @@ namespace TwitchMod.Interactions
 
         private static string HelpText()
         {
-            return Localized("Help").Replace("[commands]", string.Join(" ", Rewards.Select(reward => "!" + reward.Key.ToLowerInvariant())));
+            return Localized("Help").Replace("[commands]", string.Join(" ", Rewards.Select(reward => "!" + reward.Key.ToLowerInvariant())))
+                .Replace("[seconds]", GetInt(ChatCooldownKey, ChatCooldownDefault).ToString());
         }
 
-        private void ReplyInChat(string text)
+        /// <summary>
+        /// Answers in chat unless the last answer was too recent. Returns whether it answered.
+        /// </summary>
+        private bool ReplyInChat(string text)
         {
-            UnityTwitch? twitch = TwitchManager.Twitch;
-            string? channelId = AuthManager.ChannelId;
-            if (twitch == null || channelId == null || Time.unscaledTime < _nextReply)
-                return;
+            if (Time.unscaledTime < _nextReply)
+                return false;
 
-            // ponytail: one reply per interval for the whole chat keeps a spammed command under Twitch's chat rate limit. Per viewer if that is too quiet.
+            // ponytail: one reply per second for the whole chat stays under Twitch's 100 messages per 30 s for the broadcaster. Drops replies in a flood.
             _nextReply = Time.unscaledTime + ReplyInterval;
-            _ = twitch.SendChatMessage(channelId, text);
+            TwitchManager.Say(text);
+            return true;
         }
 
         /// <summary>
@@ -697,7 +745,6 @@ namespace TwitchMod.Interactions
             public int Cost => GetInt(OptionKey, DefaultCost);
             public int CooldownSeconds { get; } = cooldownSeconds;
             public float ReadyAt { get; set; }
-            public float ChatReadyAt { get; set; }
 
             public CustomRewardDefinition ToDefinition() => new()
             {
