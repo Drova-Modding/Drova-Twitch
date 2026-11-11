@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0] - 2026-11-11
+### Changed
+- An elite foe gets 150 to 450% health and damage, up from 400%.
+- An elite foe pays more experience, in proportion to how strong it was made: 14% more at 150%, up to double at 450%. In co-op the whole party gets it.
+- Random effects, monsters and items no longer repeat until every other one has come up once.
+- Strong random items, those worth 600 gold or more, are rare: exactly one in 25.
+
 ## [1.3.0] - 2026-11-07
 ### Added
 - Dialogue polls and boss predictions work in chat, for channels without Affiliate or Partner.
