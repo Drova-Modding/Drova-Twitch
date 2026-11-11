@@ -1,4 +1,4 @@
-# The elite reward on a single machine: the nearest enemy gets 150 to 400% health and damage plus resistances.
+# The elite reward on a single machine: the nearest enemy gets 150 to 450% health and damage plus resistances.
 
 default hero 5
 default slot 0
@@ -19,9 +19,9 @@ A twitch_reward Monster
 A expect twitch_elite contains "max" timeout=15
 A ?twitch_elite
 A expect twitch_elite hp >= 150 timeout=1
-A expect twitch_elite hp <= 400 timeout=1
+A expect twitch_elite hp <= 450 timeout=1
 A expect twitch_elite dmg >= 150 timeout=1
-A expect twitch_elite dmg <= 400 timeout=1
+A expect twitch_elite dmg <= 450 timeout=1
 A expect twitch_elite contains ":arm" timeout=1
 A ?health Snapper(Clone)
 
@@ -29,4 +29,9 @@ A ?health Snapper(Clone)
 A twitch_reward Elite
 A expect twitch_result == pending timeout=2
 A shot twitch_elite.png
-A hit Snapper(Clone) 999999 pure nosource
+
+# An elite pays more experience: what its factor adds, over 350%, as a bonus, so 150 to 450% pay 14 to 100% more.
+A expect twitch_elite paid == none timeout=1
+A hit Snapper(Clone) 999999 pure
+A expect twitch_elite paid contains "->" timeout=5
+A ?twitch_elite paid

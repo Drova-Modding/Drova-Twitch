@@ -39,6 +39,12 @@ namespace TwitchMod.Interactions
         private const float FoodReplaceChance = 0.5f;
 
         /// <summary>
+        /// The price from which a random item counts as strong: the top tenth of the pool, late game weapons and
+        /// armour. One draw in <see cref="StrongItemSlots"/> gives one of those, every other draw a cheaper item.
+        /// </summary>
+        private const int StrongItemValue = 600;
+
+        /// <summary>
         /// Recipes, permanent stat items and the respec potion would skip progression. The rest matches the
         /// randomizer's exclusions.
         /// </summary>
@@ -99,14 +105,46 @@ namespace TwitchMod.Interactions
             ],
         ];
 
+        private static readonly int[] StatusEffectGroups = Enumerable.Range(0, StatusEffectPool.Length).ToArray();
+        private static readonly HashSet<int> DrawnGroups = [];
+        private static readonly HashSet<StatusEffectChoice> DrawnEffects = [];
+        private static readonly HashSet<string> DrawnMonsters = [];
+
+        private static readonly int[] StrongItemSlots = Enumerable.Range(0, 25).ToArray();
+        private static readonly HashSet<int> DrawnStrongSlots = [];
+        private static readonly HashSet<Item> DrawnItems = [];
+
         private static List<Item>? _itemPool;
 
 #if DEBUG
+        /// <summary>
+        /// How many strong items the random item reward gave, for tests.
+        /// </summary>
+        public static int StrongItemsGiven;
+
         /// <summary>
         /// Addressable guid the monster reward spawns instead of a random pick, so tests know what comes.
         /// </summary>
         public static string? ForcedMonster;
 #endif
+
+        /// <summary>
+        /// Draws from a bag: no option comes up again before all of <paramref name="options"/> did.
+        /// <paramref name="drawn"/> is the bag's memory between draws.
+        /// </summary>
+        public static T Draw<T>(HashSet<T> drawn, IReadOnlyList<T> options)
+        {
+            List<T> left = options.Where(option => !drawn.Contains(option)).ToList();
+            if (left.Count == 0)
+            {
+                drawn.ExceptWith(options);
+                left.AddRange(options);
+            }
+
+            T pick = left[Random.Range(0, left.Count)];
+            drawn.Add(pick);
+            return pick;
+        }
 
         /// <summary>
         /// Gives one random weapon, armor or consumable of at most rare rarity.
@@ -117,7 +155,13 @@ namespace TwitchMod.Interactions
             if (pool == null || pool.Count == 0)
                 return false;
 
-            return AddToInventory(player, pool[Random.Range(0, pool.Count)], 1);
+            bool strong = Draw(DrawnStrongSlots, StrongItemSlots) == 0;
+            List<Item> tier = pool.Where(item => item.BuyValue >= StrongItemValue == strong).ToList();
+#if DEBUG
+            if (strong && tier.Count > 0)
+                StrongItemsGiven++;
+#endif
+            return AddToInventory(player, Draw(DrawnItems, tier.Count > 0 ? tier : pool), 1);
         }
 
         /// <summary>
@@ -144,7 +188,7 @@ namespace TwitchMod.Interactions
             // The player's tier and the one below, so a high level never meets a 24 HP rat.
             int tier = Array.FindLastIndex(MonsterTiers, candidate => level >= candidate.Level);
             string[] creatures = MonsterTiers[Math.Max(0, tier - 1)..(tier + 1)].SelectMany(candidate => candidate.Creatures).ToArray();
-            string creature = creatures[Random.Range(0, creatures.Length)];
+            string creature = Draw(DrawnMonsters, creatures);
 #if DEBUG
             creature = ForcedMonster ?? creature;
 #endif
@@ -222,13 +266,14 @@ namespace TwitchMod.Interactions
         /// </summary>
         public static bool GiveRandomStatusEffect(Actor player)
         {
-            int index = Random.Range(0, StatusEffectPool.Length);
             // A new food replaces the active one, so that happens only half the time.
-            if (index == FoodGroup && HasFood(player) && Random.value >= FoodReplaceChance)
-                index = Random.Range(FoodGroup + 1, StatusEffectPool.Length);
+            bool skipFood = HasFood(player) && Random.value >= FoodReplaceChance;
+            int index;
+            do
+                index = Draw(DrawnGroups, StatusEffectGroups);
+            while (index == FoodGroup && skipFood);
 
-            StatusEffectChoice[] group = StatusEffectPool[index];
-            return GiveStatusEffect(player, group[Random.Range(0, group.Length)]);
+            return GiveStatusEffect(player, Draw(DrawnEffects, StatusEffectPool[index]));
         }
 
         private static bool HasFood(Actor player)

@@ -1,0 +1,38 @@
+# The random item reward: exactly one of 25 items is a strong one, and no item comes twice.
+# Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_reward RandomItem contains True timeout=1
+A expect twitch_strong == 1 timeout=1

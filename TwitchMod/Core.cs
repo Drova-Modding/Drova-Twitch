@@ -7,7 +7,7 @@ using TwitchMod.Interactions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(TwitchMod.Core), "TwitchMod", "1.3.0", "TrustNoOneElse")]
+[assembly: MelonInfo(typeof(TwitchMod.Core), "TwitchMod", "1.4.0", "TrustNoOneElse")]
 [assembly: MelonGame("Just2D", "Drova")]
 [assembly: MelonAdditionalDependencies("Drova_Modding_API")]
 
@@ -26,7 +26,7 @@ namespace TwitchMod
         {
             CoopAccess.Declare(CoopBehavior.AuthorityGated);
             CoopSpawns.Register();
-            CoopElites.Register();
+            CoopElites.Register(HarmonyInstance);
 
             InputActionRegister.OnInputActionsLoaded += () =>
             {
