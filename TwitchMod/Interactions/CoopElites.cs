@@ -192,6 +192,11 @@ namespace TwitchMod.Interactions
 
         private static void OnElite(INetPeer sender, EliteMessage message)
         {
+            // A teammate's factor is network input. Out of range it would give an enemy endless health or experience.
+            if (!float.IsFinite(message.Factor))
+                return;
+            message.Factor = Mathf.Clamp(message.Factor, MinFactor, MaxFactor);
+
             if (NetworkAccess.Role == NetRole.Host)
             {
                 NetworkAccess.GetPeers(Peers);
