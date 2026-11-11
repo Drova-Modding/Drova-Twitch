@@ -1,8 +1,10 @@
+using Drova_Modding_API;
 using Drova_Modding_API.Access;
 using Drova_Modding_API.Systems.Networking;
 #if DEBUG
 using Drova_Modding_API.Systems.Testing;
 #endif
+using HarmonyLib;
 using Il2CppDrova;
 using MelonLoader;
 using UnityEngine;
@@ -13,6 +15,7 @@ namespace TwitchMod.Interactions
     /// Turns the nearest enemy around the streamer into an elite.
     /// In co-op every machine buffs its own copy of the enemy, because the host owns its health
     /// while either side may run its attacks. The streamer's machine picks the enemy and the factor and broadcasts both.
+    /// An elite pays more experience, in proportion to what its factor adds. In co-op the killer's gain is what the party is paid.
     /// </summary>
     internal static class CoopElites
     {
@@ -20,14 +23,17 @@ namespace TwitchMod.Interactions
         private const float SearchRadius = 400f;
         private const float ChaseRange = 900f;
         private const float MinFactor = 1.5f;
-        private const float MaxFactor = 4f;
+        private const float MaxFactor = 4.5f;
         private const float ArmorPerFactor = 4f;
         private const float WaitSeconds = 60f;
         private const float ScanInterval = 0.25f;
 
         private const float MatchRange = 60f;
 
-        private static readonly Dictionary<int, Actor> Elites = new();
+        /// <summary>The factor at which an elite pays double experience. The bonus scales with what the factor adds over an ordinary enemy.</summary>
+        private const float FactorForDoubleExperience = 4.5f;
+
+        private static readonly Dictionary<int, (Actor Actor, float Factor)> Elites = new();
         private static readonly List<INetPeer> Peers = [];
         private static readonly List<(Actor Player, Action<bool> Done, float Deadline)> Waiting = [];
 
@@ -40,9 +46,15 @@ namespace TwitchMod.Interactions
         /// <summary>
         /// Binds the elite message. Call once at startup.
         /// </summary>
-        public static void Register()
+        public static void Register(HarmonyLib.Harmony harmony)
         {
             NetworkAccess.RegisterWithId<EliteMessage>(EliteId, OnElite);
+
+            // The kill payout, by signature since an inherited instance overload shares the name.
+            Hooking.TryPrefix(harmony,
+                AccessTools.Method(typeof(PlayerAttributeStats), nameof(PlayerAttributeStats.CheckPlayerGainExp),
+                    [typeof(Actor), typeof(HealthChangeArgs), typeof(int)]),
+                typeof(CoopElites), nameof(GainExpPrefix), "PlayerAttributeStats.CheckPlayerGainExp");
 
 #if DEBUG
             TestAgent.RegisterCommand("twitch_elite", rest => DescribeLastElite(rest.Trim()));
@@ -50,9 +62,34 @@ namespace TwitchMod.Interactions
 #endif
         }
 
+        /// <summary>Raises what an elite's death pays: the bonus grows from nothing at factor 1 to double at <see cref="FactorForDoubleExperience"/>.</summary>
+        internal static void GainExpPrefix(Actor owner, ref int expOnDead)
+        {
+            try
+            {
+                if (owner == null || expOnDead <= 0 || !Elites.TryGetValue(owner.GetInstanceID(), out (Actor Actor, float Factor) elite))
+                    return;
+
+                int raised = Mathf.RoundToInt(expOnDead * (1f + ((elite.Factor - 1f) / (FactorForDoubleExperience - 1f))));
 #if DEBUG
+                _lastPayout = $"{expOnDead}->{raised}";
+#endif
+                expOnDead = raised;
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error("[Twitch] Raising an elite's experience failed: " + e);
+            }
+        }
+
+#if DEBUG
+        private static string _lastPayout = "none";
+
         private static string DescribeLastElite(string part)
         {
+            if (part == "paid")
+                return _lastPayout;
+
             if (_lastElite == null || !DamageAccess.TryGetPhysicalDamageType(out DamageStatDesc? physical)
                 || !DamageAccess.TryGetMagicalDamageType(out DamageStatDesc? magical))
                 return "none";
@@ -132,12 +169,12 @@ namespace TwitchMod.Interactions
                 return false;
             EnemyAccess.MakeAggressive(enemy, ChaseRange);
 
-            foreach ((int id, Actor elite) in Elites)
+            foreach ((int id, (Actor elite, float _)) in Elites)
             {
                 if (elite == null)
                     Elites.Remove(id);
             }
-            Elites[enemy.GetInstanceID()] = enemy;
+            Elites[enemy.GetInstanceID()] = (enemy, factor);
 #if DEBUG
             _lastElite = enemy;
 #endif

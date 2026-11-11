@@ -45,7 +45,13 @@ namespace TwitchMod.Interactions
         private const string SpeziItemId = "twitch_spezi";
         private const int SpeziChance = 3;
 
+        private const string SchnitzlChannel = "sir_schnitzl";
+        private const string SurpriseText = "Schnitzl surprise!";
+
         private const float MaxHoldSeconds = 600f;
+
+        private static readonly int[] SurpriseBag = [0, 1, 2, 3, 4];
+        private static readonly HashSet<int> SurpriseDrawn = [];
 
         private static readonly Reward[] Rewards =
         [
@@ -58,10 +64,10 @@ namespace TwitchMod.Interactions
             new("FocusPotion", "Drova: Focus potion", "Gives the streamer a focus potion.", 200, 0,
                 (player, done) => done(RewardEffects.GiveItem(player, "item_potion_flow_0", 1))),
             new("Monster", "Drova: Spawn monster", "Sends a monster after the streamer.", 2000, 60,
-                (player, done) => CoopSpawns.Spawn(CoopSpawns.Kind.Monster, player, done)),
+                (player, done) => SpawnOrSurprise(CoopSpawns.Kind.Monster, player, done)),
             new("Bandits", "Drova: Bandit ambush", "Sends a group of bandits after the streamer.", 4000, 120,
-                (player, done) => CoopSpawns.Spawn(CoopSpawns.Kind.Bandits, player, done)),
-            new("Elite", "Drova: Elite foe", "The nearest enemy becomes a boss with 150 to 400% health and damage.", 3000, 60,
+                (player, done) => SpawnOrSurprise(CoopSpawns.Kind.Bandits, player, done)),
+            new("Elite", "Drova: Elite foe", "The nearest enemy becomes a boss with 150 to 450% health and damage.", 3000, 60,
                 CoopElites.MakeElite),
             new("StatusEffect", "Drova: Random effect", "A random food, potion or bad effect such as bleeding, poison or getting drunk.", 500, 30,
                 (player, done) => done(RewardEffects.GiveRandomStatusEffect(player))),
@@ -90,6 +96,7 @@ namespace TwitchMod.Interactions
         private PredictionManager? _predictions;
 #if DEBUG
         private string _lastTestResult = "none";
+        private static int _surprises;
         private GameTask<UserInfo>? _userLookup;
 #endif
         private Mutex? _channelEventsLock;
@@ -222,8 +229,10 @@ namespace TwitchMod.Interactions
                 return _lastTestResult;
             });
 
+            TestAgent.RegisterCommand("twitch_surprises", _ => _surprises.ToString());
             TestAgent.RegisterCommand("twitch_monster", guid => RewardEffects.ForcedMonster = guid.Trim());
-            TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId)));
+            TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId + ":" + item.BuyValue)));
+            TestAgent.RegisterCommand("twitch_strong", _ => RewardEffects.StrongItemsGiven.ToString());
 #endif
 
             _rewardsEnabled = RewardsOn();
@@ -472,6 +481,29 @@ namespace TwitchMod.Interactions
                 && RewardEffects.GiveItem(player, SpeziItemId, 1))
                 return _speziGiven = true;
             return RewardEffects.GiveRandomItem(player);
+        }
+
+        /// <summary>
+        /// A spawn reward. On sir_schnitzl's channel one spawn in five comes twice and says so in chat.
+        /// </summary>
+        [HideFromIl2Cpp]
+        private static void SpawnOrSurprise(CoopSpawns.Kind kind, Actor player, Action<bool> done)
+        {
+            bool surprise = string.Equals(AuthManager.LoginName, SchnitzlChannel, StringComparison.OrdinalIgnoreCase)
+                && RewardEffects.Draw(SurpriseDrawn, SurpriseBag) == 0;
+            CoopSpawns.Spawn(kind, player, spawned =>
+            {
+                if (spawned && surprise)
+                {
+                    // A second spawn instead of a doubled one, so the co-op spawn message stays as it is.
+                    CoopSpawns.Spawn(kind, player, _ => { });
+                    TwitchManager.Say(SurpriseText);
+#if DEBUG
+                    _surprises++;
+#endif
+                }
+                done(spawned);
+            });
         }
 
         /// <summary>

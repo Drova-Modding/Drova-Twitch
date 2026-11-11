@@ -1,0 +1,24 @@
+# The Schnitzl surprise on sir_schnitzl's channel: exactly one of five spawn rewards comes twice.
+# Profile LocalLow/Just2D/Drova/Sprint_24_A (a copy of Sprint_24). Override the save with -D hero=N -D slot=N.
+
+default hero 5
+default slot 0
+
+launch A
+A wait ready=1 timeout=240
+A wait saves=separate timeout=1
+A load $hero $slot
+A wait world=1 timeout=240
+
+A twitch_monster 505832a81f5f1b24c85fa1e924bb3401
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_surprises == 0 timeout=1
+
+A twitch_channel Sir_Schnitzl
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_reward Monster contains True timeout=1
+A expect twitch_surprises == 1 timeout=1
+A ?actors 600
