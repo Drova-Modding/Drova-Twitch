@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.1] - 2026-11-11
+### Fixed
+- In co-op, an elite's strength sent by a teammate's game is kept within 150 to 450%.
+
 ## [1.4.0] - 2026-11-11
 ### Changed
 - An elite foe gets 150 to 450% health and damage, up from 400%.
