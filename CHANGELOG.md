@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0] - 2026-11-15
+### Added
+- Bandit ambushes and raids bring new bandits: with sword and bow or spear and bow, with a net (Fangnetz), and with throwing knives.
+
+### Changed
+- The monster, bandit, elite and effect rewards have no cooldown any more. In chat only the per viewer cooldown is left.
+- Ambush and raid bandits keep coming back at the streamer until they die: they no longer stop after five minutes, after leaving a game aggro zone or at their old chase leash. Dagger bandits fight with a sword, as daggers made them circle without striking. Needs Drova Modding API 0.9.0, and with the co-op mod installed co-op mod 0.4.1.
+- A flood of chat commands no longer drops replies: the mod joins them into one chat message a second.
+
+### Fixed
+- Raid bandits that stream out and back in carry their gold again.
+
 ## [1.4.1] - 2026-11-11
 ### Fixed
 - In co-op, an elite's strength sent by a teammate's game is kept within 150 to 450%.
