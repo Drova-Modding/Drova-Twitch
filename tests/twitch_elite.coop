@@ -40,4 +40,13 @@ B expect twitch_elite == $A.elite timeout=10
 A ?twitch_elite
 B shot elite_client.png
 A shot elite_host.png
-A hit Snapper(Clone) 999999 pure nosource
+# The elite pays more experience, and the whole party gets it: the killer is paid the raised figure (a Snapper pays 60)
+# and the teammate is paid what the killer gained.
+A xpgain mark
+B xpgain mark
+A hit Snapper(Clone) 999999 pure
+A expect twitch_elite paid contains "->" timeout=5
+A ?twitch_elite paid
+A expect xpgain >= 61 timeout=5
+A state
+B expect xpgain == $A.xpgain timeout=10

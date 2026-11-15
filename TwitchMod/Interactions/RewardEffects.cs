@@ -5,6 +5,7 @@ using Drova_Modding_API.Systems.Coop;
 using Drova_Modding_API.Systems.Spawning;
 using Drova_Modding_API.Systems.Spawning.Templates;
 using Il2CppDrova;
+using Il2CppDrova.InventorySystem;
 using Il2CppDrova.Items;
 using Il2CppDrova.StatusEffects;
 using Il2CppDrova.Utilities.LazyLoading;
@@ -26,7 +27,6 @@ namespace TwitchMod.Interactions
         private const int RaidersPerBandit = 10;
         private const int GoldPerRaider = 25;
         private const int MaxRaidGold = 5000;
-        private const float BodyLoadSeconds = 30f;
         private const float BanditSpread = 30f;
 
         /// <summary>
@@ -53,6 +53,7 @@ namespace TwitchMod.Interactions
         private static readonly Vector2 MonsterRange = new(150f, 300f);
         private static readonly Vector2 BanditRange = new(260f, 420f);
         private static readonly ActorWorldLocator Locator = new();
+        private static readonly WaitForSeconds GoldCheckWait = new(1f);
         private static readonly List<CoopPlayer> Players = [];
 
         /// <summary>
@@ -224,19 +225,36 @@ namespace TwitchMod.Interactions
         }
 
         /// <summary>
-        /// The raid's loot. A lazy bandit has no inventory until its body is built near a player.
+        /// The raid's loot. A lazy bandit has no inventory until its body is built near a player, and a body that
+        /// streams out and back in is a new actor, so each new body is topped up to <paramref name="gold"/>.
         /// </summary>
         private static IEnumerator GiveGoldWhenBuilt(List<LazyActor> bandits, int gold)
         {
-            float deadline = Time.time + BodyLoadSeconds;
-            while (Time.time < deadline && bandits.Any(bandit => bandit != null && (bandit.Actor == null || !bandit.Actor.IsInitialized)))
-                yield return null;
-
-            // ponytail: a body that unloads before its death is rebuilt without the gold. Track the handles if streamers outrun raids.
-            foreach (LazyActor bandit in bandits)
+            HashSet<IntPtr> filled = [];
+            HashSet<IntPtr> dead = [];
+            while (bandits.Any(bandit => bandit != null && !dead.Contains(bandit.Pointer)))
             {
-                if (bandit != null && bandit.Actor != null && bandit.Actor.IsInitialized)
-                    GiveItem(bandit.Actor, Item.READABLEID_CURRENCY, gold);
+                foreach (LazyActor bandit in bandits)
+                {
+                    if (bandit == null || dead.Contains(bandit.Pointer))
+                        continue;
+
+                    Actor? body = bandit.Actor;
+                    Health? health = body != null ? body.GetHealth() : null;
+                    if (bandit.IsDead() || (health != null && health.IsDead))
+                    {
+                        dead.Add(bandit.Pointer);
+                        continue;
+                    }
+                    if (body == null || !body.IsInitialized || !filled.Add(body.Pointer))
+                        continue;
+
+                    Inventory inventory = body.GetInventory();
+                    int missing = inventory != null ? gold - inventory.GetCurrencyFromInventory() : gold;
+                    if (missing > 0)
+                        GiveItem(body, Item.READABLEID_CURRENCY, missing);
+                }
+                yield return GoldCheckWait;
             }
         }
 
@@ -320,7 +338,7 @@ namespace TwitchMod.Interactions
 
         private static bool AddToInventory(Actor player, Item item, int amount)
         {
-            Il2CppDrova.InventorySystem.Inventory inventory = player.GetInventory();
+            Inventory inventory = player.GetInventory();
             if (inventory == null)
                 return false;
 

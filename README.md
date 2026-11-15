@@ -14,7 +14,7 @@ A [MelonLoader](https://melonwiki.xyz) mod for *Drova - Forsaken Kin* that lets 
 - **Dialogue polls:** press the poll key (`.` or left stick press) while answers are shown, and chat votes on
   what to say, in a Twitch poll or in chat.
 - **Boss predictions:** a "Will I beat the boss?" prediction opens near a boss and resolves when the fight ends.
-- **Co-op:** works with the Drova co-op mod; spawns run on the host.
+- **Co-op:** works with the Drova co-op mod 0.4.1 or later; spawns run on the host.
 
 Channel points, Twitch polls and predictions need an Affiliate or Partner channel; chat only works on any channel.
 The Channel type switch in the options picks one, Affiliate / Partner by default. A channel Twitch reports
@@ -22,7 +22,7 @@ without Affiliate or Partner always uses chat, and the switch is hidden.
 
 ## Install
 
-1. Install MelonLoader and the [Drova Modding API](https://github.com/Drova-Modding/Drova-Modding-API) 0.8.1 or later.
+1. Install MelonLoader and the [Drova Modding API](https://github.com/Drova-Modding/Drova-Modding-API) 0.9.0 or later.
 2. Extract `TwitchMod.zip` into the game folder, or install it with Vortex.
 3. In game, open Options, Modding, Twitch and log in. The login opens in your browser.
 

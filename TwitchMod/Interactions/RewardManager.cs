@@ -38,6 +38,7 @@ namespace TwitchMod.Interactions
         private const int MaxChatCooldown = 3600;
         private const float ReplyInterval = 1f;
         private const float HelpInterval = 30f;
+        private const int MaxChatMessage = 500;
         private const string HelpCommand = "!drova";
         private const string ChannelEventsLockName = @"Local\DrovaTwitchMod_ChannelEvents";
 
@@ -55,21 +56,21 @@ namespace TwitchMod.Interactions
 
         private static readonly Reward[] Rewards =
         [
-            new("RandomItem", "Drova: Random item", "Gives the streamer a random weapon, armor or consumable.", 500, 0,
+            new("RandomItem", "Drova: Random item", "Gives the streamer a random weapon, armor or consumable.", 500,
                 (player, done) => done(GiveRandomItemOrSpezi(player))),
-            new("Gold", "Drova: Gold", "Gives the streamer gold.", 300, 0,
+            new("Gold", "Drova: Gold", "Gives the streamer gold.", 300,
                 (player, done) => done(RewardEffects.GiveItem(player, Item.READABLEID_CURRENCY, GetInt(GoldAmountKey, GoldAmountDefault)))),
-            new("HealingPotion", "Drova: Healing potion", "Gives the streamer a healing potion.", 200, 0,
+            new("HealingPotion", "Drova: Healing potion", "Gives the streamer a healing potion.", 200,
                 (player, done) => done(RewardEffects.GiveItem(player, "item_potion_health_0", 1))),
-            new("FocusPotion", "Drova: Focus potion", "Gives the streamer a focus potion.", 200, 0,
+            new("FocusPotion", "Drova: Focus potion", "Gives the streamer a focus potion.", 200,
                 (player, done) => done(RewardEffects.GiveItem(player, "item_potion_flow_0", 1))),
-            new("Monster", "Drova: Spawn monster", "Sends a monster after the streamer.", 2000, 60,
+            new("Monster", "Drova: Spawn monster", "Sends a monster after the streamer.", 2000,
                 (player, done) => SpawnOrSurprise(CoopSpawns.Kind.Monster, player, done)),
-            new("Bandits", "Drova: Bandit ambush", "Sends a group of bandits after the streamer.", 4000, 120,
+            new("Bandits", "Drova: Bandit ambush", "Sends a group of bandits after the streamer.", 4000,
                 (player, done) => SpawnOrSurprise(CoopSpawns.Kind.Bandits, player, done)),
-            new("Elite", "Drova: Elite foe", "The nearest enemy becomes a boss with 150 to 450% health and damage.", 3000, 60,
+            new("Elite", "Drova: Elite foe", "The nearest enemy becomes a boss with 150 to 450% health and damage.", 3000,
                 CoopElites.MakeElite),
-            new("StatusEffect", "Drova: Random effect", "A random food, potion or bad effect such as bleeding, poison or getting drunk.", 500, 30,
+            new("StatusEffect", "Drova: Random effect", "A random food, potion or bad effect such as bleeding, poison or getting drunk.", 500,
                 (player, done) => done(RewardEffects.GiveRandomStatusEffect(player))),
         ];
 
@@ -92,6 +93,7 @@ namespace TwitchMod.Interactions
         private float _nextHelp;
         private readonly Dictionary<string, float> _viewerReadyAt = new();
         private readonly Dictionary<string, float> _viewerTold = new();
+        private readonly Queue<string> _replies = new();
         private PollManager? _polls;
         private PredictionManager? _predictions;
 #if DEBUG
@@ -230,8 +232,7 @@ namespace TwitchMod.Interactions
             });
 
             TestAgent.RegisterCommand("twitch_surprises", _ => _surprises.ToString());
-            TestAgent.RegisterCommand("twitch_monster", guid => RewardEffects.ForcedMonster = guid.Trim());
-            TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId + ":" + item.BuyValue)));
+            TestAgent.RegisterCommand("twitch_monster", guid => RewardEffects.ForcedMonster = guid.Trim());            TestAgent.RegisterCommand("twitch_items", _ => string.Join(",", (RewardEffects.GetItemPool() ?? []).Select(item => item.ReadableId + ":" + item.BuyValue)));
             TestAgent.RegisterCommand("twitch_strong", _ => RewardEffects.StrongItemsGiven.ToString());
 #endif
 
@@ -518,6 +519,7 @@ namespace TwitchMod.Interactions
             {
                 _chat.Dispose();
                 _chat = null;
+                _replies.Clear();
             }
             if (!reading)
                 return;
@@ -530,6 +532,7 @@ namespace TwitchMod.Interactions
             }
             while (_chat.Messages.TryDequeue(out (string Viewer, string Text) message))
                 OnChat(message.Viewer, message.Text, null);
+            SendReplies();
         }
 
         /// <summary>
@@ -545,8 +548,11 @@ namespace TwitchMod.Interactions
             string command = text.Trim().Split(' ', 2)[0];
             if (string.Equals(command, HelpCommand, StringComparison.OrdinalIgnoreCase))
             {
-                if (Time.unscaledTime >= _nextHelp && ReplyInChat(HelpText()))
+                if (Time.unscaledTime >= _nextHelp)
+                {
+                    _replies.Enqueue(HelpText());
                     _nextHelp = Time.unscaledTime + HelpInterval;
+                }
                 return false;
             }
 
@@ -554,21 +560,22 @@ namespace TwitchMod.Interactions
             if (reward == null)
                 return false;
 
-            // The reward's own cooldown holds for the whole chat, as with channel points. The chat cooldown holds per viewer.
-            float readyAt = Math.Max(reward.ReadyAt, _viewerReadyAt.GetValueOrDefault(viewer));
+            float readyAt = _viewerReadyAt.GetValueOrDefault(viewer);
             if (Time.unscaledTime < readyAt)
             {
                 // One reply per viewer and cooldown, so spamming a command does not spam chat back.
                 int seconds = Mathf.CeilToInt(readyAt - Time.unscaledTime);
-                if (_viewerTold.GetValueOrDefault(viewer) != readyAt
-                    && ReplyInChat(Localized("CooldownReply").Replace("[viewer]", viewer).Replace("[command]", command).Replace("[seconds]", seconds.ToString())))
+                if (_viewerTold.GetValueOrDefault(viewer) != readyAt)
+                {
+                    _replies.Enqueue(Localized("CooldownReply").Replace("[viewer]", viewer).Replace("[command]", command).Replace("[seconds]", seconds.ToString()));
                     _viewerTold[viewer] = readyAt;
+                }
                 return false;
             }
 
-            // ponytail: one entry per viewer who used a command this session, prune if chats get huge.
+            RemoveExpired(_viewerReadyAt);
+            RemoveExpired(_viewerTold);
             _viewerReadyAt[viewer] = Time.unscaledTime + GetInt(ChatCooldownKey, ChatCooldownDefault);
-            reward.ReadyAt = Time.unscaledTime + reward.CooldownSeconds;
             Deliver(reward, applied =>
             {
                 MelonLogger.Msg("[Twitch] " + viewer + " used " + command + (applied ? "." : ", it could not be applied."));
@@ -579,7 +586,6 @@ namespace TwitchMod.Interactions
                 else
                 {
                     _viewerReadyAt.Remove(viewer);
-                    reward.ReadyAt = 0f;
                 }
                 done?.Invoke(applied);
                 return Task.CompletedTask;
@@ -594,17 +600,32 @@ namespace TwitchMod.Interactions
         }
 
         /// <summary>
-        /// Answers in chat unless the last answer was too recent. Returns whether it answered.
+        /// Drops the viewers whose cooldown is over, so the map holds only viewers still waiting.
         /// </summary>
-        private bool ReplyInChat(string text)
+        [HideFromIl2Cpp]
+        private static void RemoveExpired(Dictionary<string, float> readyAtByViewer)
         {
-            if (Time.unscaledTime < _nextReply)
-                return false;
+            foreach (KeyValuePair<string, float> entry in readyAtByViewer)
+            {
+                if (entry.Value <= Time.unscaledTime)
+                    readyAtByViewer.Remove(entry.Key);
+            }
+        }
 
-            // ponytail: one reply per second for the whole chat stays under Twitch's 100 messages per 30 s for the broadcaster. Drops replies in a flood.
+        /// <summary>
+        /// Sends the queued replies joined into one message a second. That stays under Twitch's 100 messages per 30 s
+        /// for the broadcaster without dropping a reply in a flood.
+        /// </summary>
+        private void SendReplies()
+        {
+            if (_replies.Count == 0 || Time.unscaledTime < _nextReply)
+                return;
+
             _nextReply = Time.unscaledTime + ReplyInterval;
-            TwitchManager.Say(text);
-            return true;
+            string message = _replies.Dequeue();
+            while (_replies.Count > 0 && message.Length + 1 + _replies.Peek().Length <= MaxChatMessage)
+                message += " " + _replies.Dequeue();
+            TwitchManager.Say(message);
         }
 
         /// <summary>
@@ -646,7 +667,7 @@ namespace TwitchMod.Interactions
         private void OnRaid(string raider, int viewers, Action<bool>? done)
         {
             ToastAccess.Show(Localized("RaidToast").Replace("[raider]", raider).Replace("[viewers]", viewers.ToString()));
-            Reward raid = new("Raid", "Raid by " + raider, string.Empty, 0, 0,
+            Reward raid = new("Raid", "Raid by " + raider, string.Empty, 0,
                 (player, spawned) => CoopSpawns.Spawn(CoopSpawns.Kind.Bandits, player, spawned, Math.Max(1, viewers)));
             Deliver(raid, applied =>
             {
@@ -689,15 +710,6 @@ namespace TwitchMod.Interactions
             Reward? reward = Rewards.FirstOrDefault(candidate => candidate.Title == redemption.CustomRewardTitle);
             if (reward == null)
                 return;
-
-            // Twitch does not reliably enforce the global cooldown.
-            if (Time.unscaledTime < reward.ReadyAt)
-            {
-                MelonLogger.Msg("[Twitch] " + reward.Title + " is still on cooldown.");
-                _open.Add(Finish(false));
-                return;
-            }
-            reward.ReadyAt = Time.unscaledTime + reward.CooldownSeconds;
 
             Deliver(reward, Finish);
             return;
@@ -767,7 +779,7 @@ namespace TwitchMod.Interactions
             }
         }
 
-        private sealed class Reward(string key, string title, string prompt, int defaultCost, int cooldownSeconds, Action<Actor, Action<bool>> apply)
+        private sealed class Reward(string key, string title, string prompt, int defaultCost, Action<Actor, Action<bool>> apply)
         {
             public string Key { get; } = key;
             public string OptionKey { get; } = ModName + "_" + key + "Cost";
@@ -775,17 +787,13 @@ namespace TwitchMod.Interactions
             public string Title { get; } = title;
             public Action<Actor, Action<bool>> Apply { get; } = apply;
             public int Cost => GetInt(OptionKey, DefaultCost);
-            public int CooldownSeconds { get; } = cooldownSeconds;
-            public float ReadyAt { get; set; }
 
             public CustomRewardDefinition ToDefinition() => new()
             {
                 Title = Title,
                 Prompt = prompt,
                 Cost = Cost,
-                BackgroundColor = RewardColor,
-                IsGlobalCooldownEnabled = CooldownSeconds > 0,
-                GlobalCooldownSeconds = CooldownSeconds
+                BackgroundColor = RewardColor
             };
         }
     }
